@@ -126,6 +126,16 @@ async function readPersistentMatchCache(accountId,matchId){
     return {match:row.payload,fetched_at:row.fetched_at||null};
   }catch(e){console.warn('Neon match cache read failed:',e?.message||e);return null;}
 }
+async function readPersistentMatchCacheBatch(accountId,matchIds){
+  const sql=database();if(!sql)return new Map();
+  const ids=[...new Set((matchIds||[]).map(String).filter(Boolean))];if(!ids.length)return new Map();
+  try{
+    const rows=await sql.query('SELECT match_id,payload,fetched_at FROM dsl_match_cache WHERE account_id=$1 AND match_id = ANY($2::text[])',[String(accountId),ids]);
+    const out=new Map();for(const row of rows||[]){let payload=row?.payload;try{if(typeof payload==='string')payload=JSON.parse(payload);}catch{}if(payload)out.set(String(row.match_id),{match:payload,fetched_at:row.fetched_at||null});}
+    return out;
+  }catch(e){console.warn('Neon batch cache read failed:',e?.message||e);return new Map();}
+}
+
 async function writePersistentMatchCache(accountId,match){
   const sql=database();if(!sql||!match?.match_id)return false;
   try{
@@ -134,6 +144,19 @@ async function writePersistentMatchCache(accountId,match){
     return true;
   }catch(e){console.warn('Neon match cache write failed:',e?.message||e);return false;}
 }
+async function writePersistentMatchCacheBatch(accountId,matches){
+  const sql=database();if(!sql)return 0;
+  const dedup=new Map();for(const match of matches||[]){if(match?.match_id)dedup.set(String(match.match_id),match);}const list=[...dedup.values()];if(!list.length)return 0;
+  try{
+    const rows=list.map(match=>({match_id:String(match.match_id),match_seq_num:String(match.match_seq_num||''),payload:match}));
+    await sql.query(`INSERT INTO dsl_match_cache (account_id,match_id,match_seq_num,payload,fetched_at)
+      SELECT $1,x.match_id,NULLIF(x.match_seq_num,''),x.payload,NOW()
+      FROM jsonb_to_recordset($2::jsonb) AS x(match_id text,match_seq_num text,payload jsonb)
+      ON CONFLICT (account_id,match_id) DO UPDATE SET match_seq_num=EXCLUDED.match_seq_num,payload=EXCLUDED.payload,fetched_at=NOW()`,[String(accountId),JSON.stringify(rows)]);
+    return list.length;
+  }catch(e){console.warn('Neon batch cache write failed:',e?.message||e);return 0;}
+}
+
 async function steam(path,params={}){const qs=new URLSearchParams({key:apiKey(),...Object.fromEntries(Object.entries(params).map(([k,v])=>[k,String(v)]))});return fetchJson(`${STEAM_ORIGIN}/${path}?${qs}`);}
 async function profileForSteam64(steamid64){const r=await steam('ISteamUser/GetPlayerSummaries/v2/',{steamids:steamid64});return r?.response?.players?.[0]||null;}
 async function getHeroMap(){
@@ -161,16 +184,18 @@ async function historyFiltered(accountId,limit,rankedOnly){
   while(selected.length<limit&&scanned<2500){const params={account_id:accountId,matches_requested:100};if(startAt)params.start_at_match_id=startAt;const raw=await steam('IDOTA2Match_570/GetMatchHistory/v1/',params);const status=n(raw?.result?.status);if(status===15)throw Object.assign(new Error('Match history is private. Enable Expose Public Match Data in Dota 2.'),{statusCode:403});if(status!==1)throw new Error(raw?.result?.statusDetail||`Steam API status ${status}`);const page=raw?.result?.matches||[];if(!page.length)break;for(const m of page){const id=String(m.match_id);if(seen.has(id))continue;seen.add(id);scanned++;if(!rankedOnly||n(m.lobby_type)===7){selected.push(m);if(selected.length>=limit)break;}if(scanned>=2500)break;}const last=page.at(-1);if(!last?.match_id||page.length<2)break;startAt=(BigInt(last.match_id)-1n).toString();}
   return{matches:selected,scanned};
 }
-async function matchBySequence(historyMatch,accountId=null,stats=null){
+async function matchBySequence(historyMatch,accountId=null,stats=null,persistentBatch=null){
   const id=String(historyMatch.match_id),mem=globalCache.matches.get(id);
   if(mem&&Date.now()-mem.at<24*60*60*1000){if(stats)stats.memory=(stats.memory||0)+1;return mem.match;}
   if(accountId){
-    const persisted=await readPersistentMatchCache(accountId,id);
+    const persisted=persistentBatch instanceof Map?persistentBatch.get(id):await readPersistentMatchCache(accountId,id);
     if(persisted?.match){globalCache.matches.set(id,{at:Date.now(),match:persisted.match,seq:String(persisted.match.match_seq_num||historyMatch.match_seq_num||'')});if(stats)stats.neon=(stats.neon||0)+1;return persisted.match;}
   }
   const seq=String(historyMatch.match_seq_num||'');if(!/^\d+$/.test(seq))throw new Error('match_seq_num missing');
   const raw=await steam('IDOTA2Match_570/GetMatchHistoryBySequenceNum/v1/',{start_at_match_seq_num:seq,matches_requested:1});const r=(raw?.result?.matches||[]).find(x=>String(x.match_id)===id);if(!r)throw new Error('Steam sequence endpoint did not return requested match');
-  globalCache.matches.set(id,{at:Date.now(),match:r,seq});if(stats)stats.steam=(stats.steam||0)+1;if(accountId)await writePersistentMatchCache(accountId,r);return r;
+  globalCache.matches.set(id,{at:Date.now(),match:r,seq});if(stats)stats.steam=(stats.steam||0)+1;
+  if(accountId){if(stats?.deferPersistentWrites)(stats.pendingWrites||(stats.pendingWrites=[])).push(r);else await writePersistentMatchCache(accountId,r);}
+  return r;
 }
 async function mapLimit(items,limit,fn){const out=new Array(items.length);let cursor=0;const workers=Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=cursor++;if(i>=items.length)return;try{out[i]=await fn(items[i],i);}catch(e){out[i]={__error:e};}}});await Promise.all(workers);return out;}
 function normalizeMatch(r,hm,accountId){
@@ -180,15 +205,19 @@ function normalizeMatch(r,hm,accountId){
 async function bundleFor(accountId,limit,scope){
   if(!/^\d{5,12}$/.test(accountId))throw Object.assign(new Error('Invalid Dota account ID.'),{statusCode:400});limit=Math.max(20,Math.min(MAX_MATCHES,n(limit,50)));const rankedOnly=scope!=='all',steamid64=steam64FromAccount(accountId);
   const [heroMap,itemCatalog,profileRaw,history]=await Promise.all([getHeroMap(),getItemCatalog(),profileForSteam64(steamid64),historyFiltered(accountId,limit,rankedOnly)]);
-  const cacheStats={memory:0,neon:0,steam:0};const detailed=await mapLimit(history.matches,8,async hm=>normalizeMatch(await matchBySequence(hm,accountId,cacheStats),hm,accountId));let failed=0;const matches=[];for(const x of detailed){if(!x||x.__error){failed++;continue;}matches.push(x);}matches.sort((a,b)=>b.start_time-a.start_time);
+  const persistentBatch=await readPersistentMatchCacheBatch(accountId,history.matches.map(m=>String(m.match_id)));
+  const cacheStats={memory:0,neon:0,steam:0,deferPersistentWrites:true,pendingWrites:[]};
+  const detailed=await mapLimit(history.matches,8,async hm=>normalizeMatch(await matchBySequence(hm,accountId,cacheStats,persistentBatch),hm,accountId));
+  const cacheWrites=cacheStats.pendingWrites.length?await writePersistentMatchCacheBatch(accountId,cacheStats.pendingWrites):0;
+  let failed=0;const matches=[];for(const x of detailed){if(!x||x.__error){failed++;continue;}matches.push(x);}matches.sort((a,b)=>b.start_time-a.start_time);
   const ratingRows=matches.filter(m=>m.previous_rank!==null&&m.rank_change!==null),latest=ratingRows[0],currentMmr=latest?latest.previous_rank+latest.rank_change:null,deltaRows=matches.filter(m=>m.rank_change!==null),delta20=deltaRows.length?deltaRows.slice(0,20).reduce((s,m)=>s+n(m.rank_change),0):null;const rankTier=nullableInt(profileRaw?.rank_tier),leaderboardRank=nullableInt(profileRaw?.leaderboard_rank);
-  return{version:'web-beta-1',source:'steam',scope:rankedOnly?'ranked':'all',account_id:accountId,steam_id64:steamid64,profile:{profile:{personaname:String(profileRaw?.personaname||`Player ${accountId}`),avatar:String(profileRaw?.avatar||''),avatarfull:String(profileRaw?.avatarfull||''),profileurl:String(profileRaw?.profileurl||'')},rank_tier:rankTier,leaderboard_rank:leaderboardRank},rating:{current_mmr:currentMmr,rank_tier:rankTier,leaderboard_rank:leaderboardRank,delta_count:deltaRows.length,delta_last20:delta20,source:currentMmr!==null?'steam_history_rank_fields':'unavailable_in_public_webapi'},matches,heroMap,itemMap:itemCatalog.map,item_source:itemCatalog.source,match_count:matches.length,history_count:history.matches.length,scanned_history_count:history.scanned,cache_hits:(cacheStats.memory+cacheStats.neon),memory_cache_hits:cacheStats.memory,persistent_cache_hits:cacheStats.neon,fetched_matches:cacheStats.steam,cache_backend:database()?'neon+memory':'memory',failed_matches:failed,detail_method:'GetMatchHistoryBySequenceNum',role_method:'explicit-field probe -> team economy v2 -> manual override'};
+  return{version:'web-beta-3-final',source:'steam',scope:rankedOnly?'ranked':'all',account_id:accountId,steam_id64:steamid64,profile:{profile:{personaname:String(profileRaw?.personaname||`Player ${accountId}`),avatar:String(profileRaw?.avatar||''),avatarfull:String(profileRaw?.avatarfull||''),profileurl:String(profileRaw?.profileurl||'')},rank_tier:rankTier,leaderboard_rank:leaderboardRank},rating:{current_mmr:currentMmr,rank_tier:rankTier,leaderboard_rank:leaderboardRank,delta_count:deltaRows.length,delta_last20:delta20,source:currentMmr!==null?'steam_history_rank_fields':'unavailable_in_public_webapi'},matches,heroMap,itemMap:itemCatalog.map,item_source:itemCatalog.source,match_count:matches.length,history_count:history.matches.length,scanned_history_count:history.scanned,cache_hits:(cacheStats.memory+cacheStats.neon),memory_cache_hits:cacheStats.memory,persistent_cache_hits:cacheStats.neon,fetched_matches:cacheStats.steam,persistent_cache_loaded:persistentBatch.size,persistent_cache_written:cacheWrites,cache_backend:database()?'neon-batch+memory':'memory',failed_matches:failed,detail_method:'GetMatchHistoryBySequenceNum',role_method:'explicit-field probe -> team economy v2 -> manual override'};
 }
 async function findHistoryMatch(accountId,matchId){let startAt=null;for(let page=0;page<8;page++){const p={account_id:accountId,matches_requested:100};if(startAt)p.start_at_match_id=startAt;const raw=await steam('IDOTA2Match_570/GetMatchHistory/v1/',p);const arr=raw?.result?.matches||[];const found=arr.find(x=>String(x.match_id)===String(matchId));if(found)return found;if(!arr.length)break;const last=arr.at(-1);if(!last?.match_id)break;startAt=(BigInt(last.match_id)-1n).toString();}return null;}
 async function fullMatch(accountId,matchId){
   let r=globalCache.matches.get(String(matchId))?.match;if(!r){const persisted=await readPersistentMatchCache(accountId,matchId);if(persisted?.match){r=persisted.match;globalCache.matches.set(String(matchId),{at:Date.now(),match:r,seq:String(r.match_seq_num||'')});}}if(!r){const hm=await findHistoryMatch(accountId,matchId);if(!hm)throw Object.assign(new Error('Match was not found in the authenticated player history.'),{statusCode:404});r=await matchBySequence(hm,accountId);}
   const ids=[...new Set((r.players||[]).map(p=>nullableInt(p.account_id)).filter(x=>x&&x<4294967295).map(x=>steam64FromAccount(String(x))))];const profiles={};if(ids.length){try{const raw=await steam('ISteamUser/GetPlayerSummaries/v2/',{steamids:ids.join(',')});for(const sp of raw?.response?.players||[]){const aid=accountFromSteam64(sp.steamid);profiles[aid]={name:String(sp.personaname||''),avatar:String(sp.avatar||''),avatarfull:String(sp.avatarfull||''),profileurl:String(sp.profileurl||'')};}}catch{}}
-  return{version:'web-beta-1',match:r,playerProfiles:profiles,account_id:accountId,retrieval:'GetMatchHistoryBySequenceNum'};
+  return{version:'web-beta-3-final',match:r,playerProfiles:profiles,account_id:accountId,retrieval:'GetMatchHistoryBySequenceNum'};
 }
 async function deepMatch(accountId,matchId){
   try{const raw=await fetchJson(`${OPEN_DOTA}/matches/${encodeURIComponent(matchId)}`,{timeout:18000,retries:1});const player=(raw.players||[]).find(p=>String(p.account_id)===String(accountId));if(!player)return{available:false,source:'opendota',status:404,details:'Player was not found in parsed match',match_id:matchId};const slot=n(player.player_slot),idx=slot>=128?(slot-128)+5:slot;const fights=[];for(const tf of raw.teamfights||[]){const ps=Array.isArray(tf.players)?tf.players[idx]:tf.players?.[String(slot)];if(ps)fights.push({start:tf.start,end:tf.end,kills:ps.kills,deaths:ps.deaths,damage:ps.damage,healing:ps.healing,gold_delta:ps.gold_delta,xp_delta:ps.xp_delta});}
@@ -203,7 +232,7 @@ async function benchmarkCohort(heroId,role,skill,target,minMinutes,maxMinutes){
   for(const x of details){if(!x||x.__error){failed++;continue;}const {hm,r}=x;if(n(r.lobby_type)!==7)continue;const mins=Math.max(1,n(r.duration)/60);if(minMinutes>0&&mins<minMinutes)continue;if(maxMinutes>0&&mins>=maxMinutes)continue;const p=(r.players||[]).find(p=>n(p.hero_id)===n(heroId));if(!p)continue;const hp=(hm.players||[]).find(p=>n(p.hero_id)===n(heroId));const radiant=n(p.player_slot)<128,team=(r.players||[]).filter(z=>(n(z.player_slot)<128)===radiant),ri=resolveRole(hp,team,p);if(n(ri.role)!==n(role))continue;rows.push({win:radiant===!!r.radiant_win,kda:(n(p.kills)+n(p.assists))/Math.max(1,n(p.deaths)),deaths:n(p.deaths),gpm:n(p.gold_per_min),xpm:n(p.xp_per_min),lhpm:n(p.last_hits)/mins,dmgpm:n(p.hero_damage)/mins,assistpm:n(p.assists)/mins,towerpm:n(p.tower_damage)/mins});if(rows.length>=target)break;}
   const data=summarizeRows(rows,skill,heroId,role,candidates.length,failed,minMinutes,maxMinutes);globalCache.benchmark.set(cacheKey,{at:Date.now(),data});return data;
 }
-async function benchmark(heroId,role,peerSkill,sample,minMinutes,maxMinutes){const peer=await benchmarkCohort(heroId,role,peerSkill,sample,minMinutes,maxMinutes);const same=peerSkill===3,elite=same?peer:await benchmarkCohort(heroId,role,3,sample,minMinutes,maxMinutes);return{version:'web-beta-1',hero_id:heroId,role,peer_skill:peerSkill,elite_skill:3,peer,elite,same_cohort:same,from_cache:!!peer.from_cache&&!!elite.from_cache,cache_age_hours:Math.max(peer.cache_age_hours||0,elite.cache_age_hours||0),duration_min:minMinutes,duration_max:maxMinutes,method:'Steam hero_id + skill -> ranked -> duration -> team economy role'};}
+async function benchmark(heroId,role,peerSkill,sample,minMinutes,maxMinutes){const peer=await benchmarkCohort(heroId,role,peerSkill,sample,minMinutes,maxMinutes);const same=peerSkill===3,elite=same?peer:await benchmarkCohort(heroId,role,3,sample,minMinutes,maxMinutes);return{version:'web-beta-3-final',hero_id:heroId,role,peer_skill:peerSkill,elite_skill:3,peer,elite,same_cohort:same,from_cache:!!peer.from_cache&&!!elite.from_cache,cache_age_hours:Math.max(peer.cache_age_hours||0,elite.cache_age_hours||0),duration_min:minMinutes,duration_max:maxMinutes,method:'Steam hero_id + skill -> ranked -> duration -> team economy role'};}
 
 async function authSteam(req,res){
   const origin=originOf(req),returnTo=`${origin}/api/auth/callback`,q=new URLSearchParams({'openid.ns':'http://specs.openid.net/auth/2.0','openid.mode':'checkid_setup','openid.return_to':returnTo,'openid.realm':origin,'openid.identity':'http://specs.openid.net/auth/2.0/identifier_select','openid.claimed_id':'http://specs.openid.net/auth/2.0/identifier_select'});redirect(res,`https://steamcommunity.com/openid/login?${q}`);
@@ -225,7 +254,7 @@ export default async function handler(req,res){
     if(path==='/api/auth/callback')return authCallback(req,res,url);
     if(path==='/api/auth/me')return authMe(req,res);
     if(path==='/api/auth/logout'){clearSessionCookie(res);return json(res,200,{ok:true});}
-    if(path==='/api/health'||path==='/health')return json(res,200,{ok:true,service:'Dota Skill Lab Web Beta',version:'web-beta-2',steam_key_configured:/^[A-Fa-f0-9]{32}$/.test(String(process.env.STEAM_API_KEY||'')),database_configured:!!String(process.env.DATABASE_URL||'').trim(),match_cache:'neon+memory',auth:'steam-openid'});
+    if(path==='/api/health'||path==='/health')return json(res,200,{ok:true,service:'Dota Skill Lab Web Beta',version:'web-beta-3-final',steam_key_configured:/^[A-Fa-f0-9]{32}$/.test(String(process.env.STEAM_API_KEY||'')),database_configured:!!String(process.env.DATABASE_URL||'').trim(),match_cache:'neon-batch+memory',auth:'steam-openid'});
     if(path==='/api/diagnostics'){
       const [st,od]=await Promise.all([fetchText(`${STEAM_ORIGIN}/ISteamWebAPIUtil/GetServerInfo/v1/`,{timeout:8000,retries:0}).then(()=>({ok:true,status:200,details:'OK'})).catch(e=>({ok:false,status:e.status||null,details:e.message})),fetchText(`${OPEN_DOTA}/health`,{timeout:8000,retries:0}).then(()=>({ok:true,status:200,details:'OK'})).catch(e=>({ok:false,status:e.status||null,details:e.message}))]);return json(res,200,{steam:st,opendota:od});
     }
