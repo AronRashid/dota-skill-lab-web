@@ -1,0 +1,33 @@
+name: Apply persistent match cache
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-match-cache.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply cache patch
+        run: node scripts/apply-match-cache.mjs
+      - name: Validate JavaScript
+        run: node --check api/index.js
+      - name: Commit cache layer
+        run: |
+          if git diff --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git config user.name "dota-skill-lab-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add api/index.js
+          git commit -m "Enable persistent Neon match cache"
+          git push
