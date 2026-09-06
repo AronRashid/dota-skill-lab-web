@@ -2,6 +2,10 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api/user-state",
+      "destination": "/api/user-state.js"
+    },
+    {
       "source": "/api/steam/bundle",
       "destination": "/api/bundle20.js"
     },
@@ -37,6 +41,10 @@
     "api/bundle20.js": {
       "maxDuration": 300,
       "memory": 1024
+    },
+    "api/user-state.js": {
+      "maxDuration": 30,
+      "memory": 512
     }
   }
 }
