@@ -55,3 +55,5 @@ The Steam account must have **Expose Public Match Data** enabled in Dota 2 for m
 - 100/200-match first loads make many Steam requests. The mobile beta should start with a smaller bootstrap sample and expand after the dashboard is visible.
 - External Steam benchmark can be slower than the core personal analytics.
 - A dedicated service Steam account/API key is recommended before broader public testing so the product is not tied to a personal Steam account.
+
+Deployment note: Neon `DATABASE_URL` was enabled for the production multi-user rollout on 2026-09-06.
