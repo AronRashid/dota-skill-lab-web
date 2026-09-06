@@ -17,6 +17,7 @@ const state = {
   roleOverrides: {},
   ratingAuto: {},
   ratingManual: {},
+  remoteState: {available:false, loaded:false, found:false, syncing:false, updatedAt:null},
   bundleMeta: {},
   benchmark: {data:null, loading:false, heroId:null, role:null, peerSkill:null, durationMode:'auto'},
   deep: {matchId:null, loading:false, data:null},
@@ -50,7 +51,7 @@ const I18N = {
     heroCoach:'Тренер по героям', heroesConsistency:'Герои и устойчивость результатов', mistakeEngine:'Движок ошибок', repeatingPatterns:'Повторяющиеся паттерны', mistakeNotice:'Важно: v12 показывает <strong>статистические ассоциации</strong>, а не доказывает причинность. Анализ строится на выбранном наборе матчей.', matchReview:'Разбор матча', selectMatch:'Выберите матч', selectMatchHint:'Откройте матч в разделе «Матчи» и выберите «Анализ ошибок».',
     trainingCoach:'Тренировочный тренер', oneGoalAtTime:'Одна задача за раз', activeBlock:'Активный блок', startFive:'Начать блок на 5 матчей', resetBlock:'Сбросить блок', personalJournal:'Личный журнал', journalHint:'После игровой сессии фиксируйте один вывод, который можно проверить в следующих матчах.', saveNote:'Сохранить заметку', progressLabel:'Прогресс', last20VsPrevious:'Последние 20 против предыдущих 20', trendLabel:'Динамика', coachScoreBlocks:'Оценка тренера по блокам из 10 матчей', dataQuality:'Качество данных', findingReliability:'Надёжность текущих выводов',
     ranked:'РЕЙТИНГ', unranked:'ОБЫЧНЫЙ', victory:'ПОБЕДА', defeat:'ПОРАЖЕНИЕ', saved:'Сохранено', loading:'Загрузка…', importing:'Импортирую…', needSteamKey:'Нужен ключ Steam API', loadError:'Ошибка загрузки', steamUnavailable:'Steam API недоступен в этой сети', steamAvailable:'Steam API доступен', opendotaAvailable:'OpenDota доступен', opendotaBlocked:'OpenDota заблокирован/недоступен', networkDiagFailed:'Не удалось выполнить диагностику сети',
-    latestFirst:'Сортировка: самые новые матчи сверху', rankedDataset:'рейтинговых', allDataset:'всех', matchesWord:'матчей', scanned:'просканировано', lowRole:'ролей с низкой уверенностью', sourceSteam:'Источник: Steam API',
+    latestFirst:'Сортировка: самые новые матчи сверху', rankedDataset:'рейтинговых', allDataset:'всех', matchesWord:'матчей', scanned:'просканировано', lowRole:'ролей с низкой уверенностью', sourceSteam:'Источник: Steam API', cloudSyncOn:'Профиль синхронизируется', cloudSyncLocal:'Настройки только на этом устройстве',
     roleManual:'подтверждено вручную', roleExplicit:'роль из данных Steam', roleHeuristic:'авто: экономика команды', confidenceHigh:'высокая', confidenceMedium:'средняя', confidenceLow:'низкая', noData:'Недостаточно данных', wait:'ОЖИДАНИЕ', active:'АКТИВНО', ready:'ГОТОВО', trainingFocus:'Фокус', nextFiveRole:'5 следующих матчей на этой роли. Проверяется одна измеримая задача.', progress:'Прогресс', completed:'выполнено', blockFixed:'закреплено', repeatBlock:'повторить', startBlockHint:'Нажмите «Начать блок», и сайт зафиксирует текущий последний матч. Следующие 5 матчей этой роли будут оцениваться по цели.', pass:'ВЫПОЛНЕНО', miss:'НЕ ВЫПОЛНЕНО', gameWord:'Игра',
     ratingTitle:'Ранг и MMR', ratingAutoTitle:'Автоматические данные', ratingManualTitle:'Ручной снимок', ratingAutoUnavailable:'Текущий публичный Steam Web API не передал медаль/MMR и изменения рейтинга. Поэтому точные значения автоматически получить из этого источника нельзя. Можно один раз сохранить текущий ранг и MMR вручную из клиента Dota 2.', medal:'Медаль', star:'Звезда', mmr:'MMR', saveRating:'Сохранить', clearRating:'Очистить ручные данные', ratingSaved:'Ранг/MMR сохранены локально.', manualSnapshot:'ручной снимок', steamRatingFields:'поля рейтинга Steam', ratingUnavailable:'нет данных в текущем Steam Web API', deltaLast20:'MMR за последние 20', exactRankNote:'Значок ниже является локальным отображением выбранной медали; это не официальное изображение Valve.',
     medalHerald:'Рекрут', medalGuardian:'Страж', medalCrusader:'Рыцарь', medalArchon:'Герой', medalLegend:'Легенда', medalAncient:'Властелин', medalDivine:'Божество', medalImmortal:'Титан', uncalibrated:'Нет данных',
@@ -75,7 +76,7 @@ const I18N = {
     matches:'Matches', historyPerformance:'History and performance score', allResults:'All results', wins:'Wins', losses:'Losses', allRoles:'All roles', match:'Match', hero:'Hero', role:'Role', result:'Result', date:'Date', mmrDelta:'MMR Δ', scoreLabel:'Score', matchOpenHint:'Click “Open match” to see both lineups, score, all 10 players, items, and all match data available from Steam.', openMatch:'Open match', analyzeMistakes:'Mistake analysis',
     patternEngine:'Pattern engine', personalThresholds:'Personal thresholds and result associations', patternNotice:'These are <strong>statistical associations</strong>, not proof of causality. Larger samples increase confidence.', heroRolePatterns:'Hero + role', heroRoleFindings:'Strongest patterns for your heroes', sessionAnalytics:'Session analytics', sessionTitle:'How your performance changes within a session', gameInSession:'Game number in session', sessionPositionTitle:'Results by game order', afterLosses:'After losses', lossStreakTitle:'Next game after a losing streak', sessionCoach:'Session coach', sessionRecommendation:'What your data shows',
     heroCoach:'Hero Coach', heroesConsistency:'Heroes and result stability', mistakeEngine:'Mistake Engine', repeatingPatterns:'Recurring patterns', mistakeNotice:'Important: v12 shows <strong>statistical associations</strong>, not proven causality. Analysis uses the selected match dataset.', matchReview:'Match review', selectMatch:'Select a match', selectMatchHint:'Open a match in “Matches” and choose “Mistake analysis”.', trainingCoach:'Training Coach', oneGoalAtTime:'One goal at a time', activeBlock:'Active block', startFive:'Start 5-match block', resetBlock:'Reset block', personalJournal:'Personal journal', journalHint:'After a session, record one observation you can test in the next matches.', saveNote:'Save note', progressLabel:'Progress', last20VsPrevious:'Last 20 versus previous 20', trendLabel:'Trend', coachScoreBlocks:'Coach Score by 10-match blocks', dataQuality:'Data quality', findingReliability:'Reliability of current findings',
-    ranked:'RANKED', unranked:'UNRANKED', victory:'WIN', defeat:'LOSS', saved:'Saved', loading:'Loading…', importing:'Importing…', needSteamKey:'Steam API key required', loadError:'Load error', steamUnavailable:'Steam API is unavailable on this network', steamAvailable:'Steam API available', opendotaAvailable:'OpenDota available', opendotaBlocked:'OpenDota blocked/unavailable', networkDiagFailed:'Network diagnostics failed', latestFirst:'Sorting: newest matches first', rankedDataset:'ranked', allDataset:'all', matchesWord:'matches', scanned:'scanned', lowRole:'low-confidence roles', sourceSteam:'Source: Steam API',
+    ranked:'RANKED', unranked:'UNRANKED', victory:'WIN', defeat:'LOSS', saved:'Saved', loading:'Loading…', importing:'Importing…', needSteamKey:'Steam API key required', loadError:'Load error', steamUnavailable:'Steam API is unavailable on this network', steamAvailable:'Steam API available', opendotaAvailable:'OpenDota available', opendotaBlocked:'OpenDota blocked/unavailable', networkDiagFailed:'Network diagnostics failed', latestFirst:'Sorting: newest matches first', rankedDataset:'ranked', allDataset:'all', matchesWord:'matches', scanned:'scanned', lowRole:'low-confidence roles', sourceSteam:'Source: Steam API', cloudSyncOn:'Profile sync active', cloudSyncLocal:'Settings only on this device',
     roleManual:'manually verified', roleExplicit:'Steam role field', roleHeuristic:'auto: team economy', confidenceHigh:'high', confidenceMedium:'medium', confidenceLow:'low', noData:'Not enough data', wait:'WAIT', active:'ACTIVE', ready:'READY', trainingFocus:'Focus', nextFiveRole:'next 5 matches on this role. One measurable goal is checked.', progress:'Progress', completed:'passed', blockFixed:'consolidated', repeatBlock:'repeat', startBlockHint:'Click “Start block”; the site records the latest current match and evaluates the next 5 matches on this role.', pass:'PASS', miss:'MISS', gameWord:'Game',
     ratingTitle:'Rank and MMR', ratingAutoTitle:'Automatic data', ratingManualTitle:'Manual snapshot', ratingAutoUnavailable:'The current public Steam Web API did not expose medal/MMR or rating deltas. Exact values cannot be recovered automatically from this source. You can save a current snapshot from the Dota 2 client.', medal:'Medal', star:'Star', mmr:'MMR', saveRating:'Save', clearRating:'Clear manual data', ratingSaved:'Rank/MMR saved locally.', manualSnapshot:'manual snapshot', steamRatingFields:'Steam rating fields', ratingUnavailable:'not available in the current Steam Web API', deltaLast20:'MMR over last 20', exactRankNote:'The badge below is a local visual representation of the selected medal, not an official Valve asset.',
     medalHerald:'Herald', medalGuardian:'Guardian', medalCrusader:'Crusader', medalArchon:'Archon', medalLegend:'Legend', medalAncient:'Ancient', medalDivine:'Divine', medalImmortal:'Immortal', uncalibrated:'No data', depthHigh:'HIGH', depthMedium:'MEDIUM', depthLow:'LOW', historyDepth:'History depth', autoRoleLow:'Low-confidence auto roles', manualRoleCorrections:'Manual role corrections', topMistakeConfidence:'Top mistake confidence', dataQualityNote:'Longer ranked history and more accurate roles improve thresholds, percentiles, and mistake priorities.', rankedLabel:'Ranked',
@@ -307,7 +308,7 @@ function applyI18n(){
   if($('authLangEn'))$('authLangEn').classList.toggle('active',state.lang==='en');
   $('journal').placeholder = state.lang==='ru' ? 'Например: на Pos 4 не заходить первым в туман после 20 минуты...' : 'Example: on Pos 4, do not enter fog first after minute 20...';
 }
-function setLanguage(lang){ if(!['ru','en'].includes(lang)) return; state.lang=lang; localStorage.setItem('dotaSkillLab.lang',lang); if(state.matches.length) renderAll(); else { applyI18n(); runDiagnostics(); } }
+function setLanguage(lang){ if(!['ru','en'].includes(lang)) return; state.lang=lang; localStorage.setItem('dotaSkillLab.lang',lang); queueRemoteUserStateSync(); if(state.matches.length) renderAll(); else { applyI18n(); runDiagnostics(); } }
 
 function extractAccountId(value){ const m=String(value||'').trim().match(/(?:players\/)?(\d{5,12})(?:\D*$|$)/); return m?m[1]:null; }
 function showError(msg){ els.error.textContent=msg; els.error.classList.remove('hidden'); }
@@ -336,9 +337,78 @@ function itemInternalName(id){ return state.itemMap?.[String(id)]?.name || ''; }
 function itemImg(id){ if(!Number(id))return''; const x=state.itemMap?.[String(id)]||{}; if(x.image)return String(x.image); const n=itemInternalName(id).replace(/^item_/,''); return n?`https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/${n}.png`:''; }
 function roleName(r){ return r?`Pos ${r}`:'—'; }
 
+function remoteStorageSnapshot(){
+  const trainingKey=state.accountId?`dotaSkillLab.training.${state.accountId}`:null;
+  const journalKey=`dotaSkillLab.journal.${state.accountId||'guest'}`;
+  let training=null;
+  try{training=trainingKey?JSON.parse(localStorage.getItem(trainingKey)||'null'):null;}catch{}
+  return {
+    role_overrides: state.roleOverrides||{},
+    rating_manual: state.ratingManual||{},
+    training,
+    journal: localStorage.getItem(journalKey)||'',
+    preferences: {
+      language: state.lang,
+      scope: state.scope,
+      history_limit: Number(els.historyLimit?.value||localStorage.getItem('dotaSkillLab.historyLimit')||50)
+    }
+  };
+}
+function applyRemoteState(remote){
+  if(!remote||!state.accountId)return;
+  const roles=(remote.role_overrides&&typeof remote.role_overrides==='object')?remote.role_overrides:{};
+  const rating=(remote.rating_manual&&typeof remote.rating_manual==='object')?remote.rating_manual:{};
+  localStorage.setItem(`dotaSkillLab.roles.${state.accountId}`,JSON.stringify(roles));
+  localStorage.setItem(`dotaSkillLab.rating.${state.accountId}`,JSON.stringify(rating));
+  const tk=`dotaSkillLab.training.${state.accountId}`;
+  if(remote.training) localStorage.setItem(tk,JSON.stringify(remote.training)); else localStorage.removeItem(tk);
+  localStorage.setItem(`dotaSkillLab.journal.${state.accountId}`,String(remote.journal||''));
+  const pref=remote.preferences||{};
+  if(['ru','en'].includes(pref.language)){state.lang=pref.language;localStorage.setItem('dotaSkillLab.lang',pref.language);}
+  if(['ranked','all'].includes(pref.scope)){state.scope=pref.scope;localStorage.setItem('dotaSkillLab.matchScope',pref.scope);}
+  const lim=String(pref.history_limit||'');
+  if(['50','100','200'].includes(lim)){localStorage.setItem('dotaSkillLab.historyLimit',lim);if(els.historyLimit)els.historyLimit.value=lim;}
+  if(els.matchScope)els.matchScope.value=state.scope==='all'?'all':'ranked';
+  loadRoleOverrides();loadRatingManual();
+}
+async function loadRemoteUserState(){
+  if(!state.accountId)return false;
+  try{
+    const data=await fetchJson('/api/user-state');
+    state.remoteState={available:!!data.available,loaded:true,found:!!data.found,syncing:false,updatedAt:data.updated_at||null};
+    if(!data.available)return false;
+    if(data.found&&data.state){applyRemoteState(data.state);return true;}
+    loadRoleOverrides();loadRatingManual();
+    await saveRemoteUserState(true);
+    return false;
+  }catch(e){
+    console.warn('Remote user state unavailable:',e);
+    state.remoteState={...state.remoteState,available:false,loaded:true,syncing:false};
+    return false;
+  }
+}
+let remoteSyncTimer=null;
+function queueRemoteUserStateSync(delay=500){
+  if(!state.accountId)return;
+  clearTimeout(remoteSyncTimer);
+  remoteSyncTimer=setTimeout(()=>saveRemoteUserState(false),delay);
+}
+async function saveRemoteUserState(force=false){
+  if(!state.accountId||state.remoteState.syncing)return false;
+  if(!force&&state.remoteState.loaded&&!state.remoteState.available)return false;
+  state.remoteState.syncing=true;
+  try{
+    const r=await fetch('/api/user-state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(remoteStorageSnapshot())});
+    const text=await r.text();let data={};try{data=text?JSON.parse(text):{};}catch{}
+    if(!r.ok)throw Object.assign(new Error(data.error||`HTTP ${r.status}`),{status:r.status});
+    state.remoteState={available:!!data.available,loaded:true,found:true,syncing:false,updatedAt:data.updated_at||null};
+    return !!data.available;
+  }catch(e){console.warn('Remote user state save failed:',e);state.remoteState.syncing=false;return false;}
+}
+
 function roleKey(){ return `dotaSkillLab.roles.${state.accountId||'guest'}`; }
 function loadRoleOverrides(){ try{state.roleOverrides=JSON.parse(localStorage.getItem(roleKey())||'{}')||{};}catch{state.roleOverrides={};} }
-function saveRoleOverrides(){ localStorage.setItem(roleKey(),JSON.stringify(state.roleOverrides)); }
+function saveRoleOverrides(){ localStorage.setItem(roleKey(),JSON.stringify(state.roleOverrides)); queueRemoteUserStateSync(); }
 function manualRoleValue(v){ return typeof v==='object'&&v?Number(v.role):Number(v); }
 function getRole(m){ const o=state.roleOverrides[String(m.match_id)]; return Number(manualRoleValue(o)||m.role_auto||0)||null; }
 function roleConfidenceLevel(m){ if(state.roleOverrides[String(m.match_id)])return'manual'; const c=Number(m.role_confidence||0); return c>=.75?'high':c>=.55?'medium':'low'; }
@@ -348,7 +418,7 @@ function confidenceLabel(m){ const c=roleConfidenceLevel(m); return c==='manual'
 
 function ratingStorageKey(){ return `dotaSkillLab.rating.${state.accountId||'guest'}`; }
 function loadRatingManual(){ try{state.ratingManual=JSON.parse(localStorage.getItem(ratingStorageKey())||'{}')||{};}catch{state.ratingManual={};} }
-function saveRatingManual(v){ state.ratingManual=v||{}; localStorage.setItem(ratingStorageKey(),JSON.stringify(state.ratingManual)); }
+function saveRatingManual(v){ state.ratingManual=v||{}; localStorage.setItem(ratingStorageKey(),JSON.stringify(state.ratingManual)); queueRemoteUserStateSync(); }
 const MEDALS=['herald','guardian','crusader','archon','legend','ancient','divine','immortal'];
 function medalLabel(m){ const map={herald:'medalHerald',guardian:'medalGuardian',crusader:'medalCrusader',archon:'medalArchon',legend:'medalLegend',ancient:'medalAncient',divine:'medalDivine',immortal:'medalImmortal'}; return t(map[m]||'uncalibrated'); }
 function rankTierData(rankTier,leaderboardRank){
@@ -559,7 +629,7 @@ async function loadViaSteam(id){
   const bundle=await fetchJson(`/api/steam/bundle?limit=${limit}&scope=${encodeURIComponent(scope)}`);
   setLoadPipeline('analytics',true);state.provider='steam';state.profile=bundle.profile||{};state.matches=(Array.isArray(bundle.matches)?bundle.matches:[]).sort((a,b)=>Number(b.start_time)-Number(a.start_time));state.heroMap=bundle.heroMap||{};state.itemMap=bundle.itemMap||{};state.steamId64=bundle.steam_id64||null;state.ratingAuto=bundle.rating||{};state.accountId=String(bundle.account_id||id);
   loadRoleOverrides();loadRatingManual();recomputeAnalytics();
-  localStorage.setItem('dotaSkillLab.lastAccountId',state.accountId);localStorage.setItem('dotaSkillLab.historyLimit',String(limit));localStorage.setItem('dotaSkillLab.matchScope',scope);
+  localStorage.setItem('dotaSkillLab.lastAccountId',state.accountId);localStorage.setItem('dotaSkillLab.historyLimit',String(limit));localStorage.setItem('dotaSkillLab.matchScope',scope);queueRemoteUserStateSync(900);
   state.bundleMeta={scanned:bundle.scanned_history_count||bundle.history_count||state.matches.length,failed:bundle.failed_matches||0,scope:bundle.scope||scope,itemSource:bundle.item_source||'none'};setLoadPipeline('ready',true); return bundle;
 }
 async function loadPlayer(){
@@ -590,14 +660,14 @@ async function bootstrapSteamAuth(){
     const me=await fetchJson('/api/auth/me');
     if(!me?.authenticated){showAuthGate();return;}
     state.accountId=String(me.account_id||'');state.steamId64=String(me.steamid64||'');state.steamKey='server';els.input.value=state.accountId;
-    if(me.profile)state.profile={profile:me.profile};setLoadPipeline('connect',true);await loadPlayer();setTimeout(()=>setLoadPipeline('ready',false),650);
+    if(me.profile)state.profile={profile:me.profile};setLoadPipeline('connect',true);await loadRemoteUserState();applyI18n();await loadPlayer();setTimeout(()=>setLoadPipeline('ready',false),650);
   }catch(e){console.error(e);showAuthGate(friendlyError(e.message));}
 }
 function journalStorageKey(){return `dotaSkillLab.journal.${state.accountId||'guest'}`;}
 function loadJournal(){const old=localStorage.getItem('dotaSkillLab.journal');const key=journalStorageKey();if(!localStorage.getItem(key)&&old&&state.accountId)localStorage.setItem(key,old);$('journal').value=localStorage.getItem(key)||'';}
 
 function renderAll(){ applyI18n();renderProfile();renderOverview();renderCoachPage();renderDeepSetup();renderMatches();renderPatterns();renderSessions();renderHeroes();renderMistakes();renderTraining();renderProgress();renderBenchmarkSetup();if(state.benchmark.data)renderBenchmark(); }
-function renderProfile(){ const p=state.profile?.profile||{};els.avatar.src=p.avatarfull||p.avatar||'';els.avatar.style.visibility='visible';els.avatar.onerror=()=>els.avatar.style.visibility='hidden';els.profileName.textContent=p.personaname||`${state.lang==='ru'?'Игрок':'Player'} ${state.accountId}`;const low=state.matches.filter(m=>roleConfidenceLevel(m)==='low').length;els.profileMeta.textContent=`Dota ID ${state.accountId} · ${t('sourceSteam')} · ${state.scope==='ranked'?t('scopeRanked'):t('scopeAll')}`;const scanned=state.bundleMeta?.scanned||state.matches.length;const itemSource=state.bundleMeta?.itemSource||'none';const itemLabel=itemSource==='dota2_datafeed'?t('itemCatalogSteam'):itemSource==='dotaconstants_fallback'?t('itemCatalogFallback'):t('itemCatalogMissing');els.datasetChip.textContent=`${state.matches.length} ${t('matchesWord')} · ${t('scanned')} ${scanned} · ${low} ${t('lowRole')} · ${itemLabel}`; }
+function renderProfile(){ const p=state.profile?.profile||{};els.avatar.src=p.avatarfull||p.avatar||'';els.avatar.style.visibility='visible';els.avatar.onerror=()=>els.avatar.style.visibility='hidden';els.profileName.textContent=p.personaname||`${state.lang==='ru'?'Игрок':'Player'} ${state.accountId}`;const low=state.matches.filter(m=>roleConfidenceLevel(m)==='low').length;els.profileMeta.textContent=`Dota ID ${state.accountId} · ${t('sourceSteam')} · ${state.scope==='ranked'?t('scopeRanked'):t('scopeAll')}`;const scanned=state.bundleMeta?.scanned||state.matches.length;const itemSource=state.bundleMeta?.itemSource||'none';const itemLabel=itemSource==='dota2_datafeed'?t('itemCatalogSteam'):itemSource==='dotaconstants_fallback'?t('itemCatalogFallback'):t('itemCatalogMissing');const syncLabel=state.remoteState?.available?t('cloudSyncOn'):t('cloudSyncLocal');els.datasetChip.textContent=`${state.matches.length} ${t('matchesWord')} · ${t('scanned')} ${scanned} · ${low} ${t('lowRole')} · ${itemLabel} · ${syncLabel}`; }
 function renderOverview(){
   const ms=state.matches,a=state.analytics,w=ms.filter(isWin).length,r=currentRating();
   $('kpiMatches').textContent=ms.length;$('kpiDepth').textContent=state.scope==='ranked'?t('scopeRanked'):t('scopeAll');$('kpiWinrate').textContent=fmtPct(ms.length?w/ms.length:0,1);$('kpiRecord').textContent=state.lang==='ru'?`${w} побед · ${ms.length-w} поражений`:`${w}W – ${ms.length-w}L`;$('kpiKda').textContent=avg(ms,kda).toFixed(2);$('kpiDeaths').textContent=avg(ms,m=>m.deaths).toFixed(1);$('deathSignal').textContent=ms.length>=20?`${t('last20')}: ${avg(ms.slice(0,20),m=>m.deaths).toFixed(1)}`:'—';$('coachScore').textContent=Math.round(avg(ms.slice(0,20),m=>m._score||50));$('kpiRole').textContent=roleName(a.primaryRole);const roleN=ms.slice(0,100).filter(m=>getRole(m)===a.primaryRole).length;$('roleConfidence').textContent=a.primaryRole?`${roleN}/${Math.min(100,ms.length)}`:'—';
@@ -929,8 +999,8 @@ function renderTraining(){
   $('trainingBody').innerHTML=`<div class="quest-hero"><div class="quest-ring" style="--quest:${active?Math.round(results.length/5*100):0}"><b>${results.length}/5</b><span>${t('questProgress')}</span></div><div class="quest-copy"><span class="quest-status ${results.length>=5&&passed>=4?'mastered':results.length>=5?'repeat':active?'ontrack':'ready'}">${status}</span><h3>${safeText(tg.label)}</h3><p>${t('trainingFocus')}: <b>${roleName(tg.role)}</b> · ${t('nextFiveRole')}</p><div class="quest-run">${[0,1,2,3,4].map(i=>{const x=results[i];return`<div class="quest-game ${x?(x.pass?'pass':'fail'):''}"><i>${x?(x.pass?'✓':'×'):i+1}</i><span>${x?`${safeText(heroName(x.m.hero_id))}<small>${x.m.kills}/${x.m.deaths}/${x.m.assists}</small>`:`${t('gameWord')} ${i+1}`}</span></div>`}).join('')}</div>${active?`<div class="training-rule">${t('completed')}: <b>${passed}/5</b>${results.length>=5?` · <b>${passed>=4?t('blockFixed'):t('repeatBlock')}</b>`:''}</div>`:`<div class="training-rule">${t('startBlockHint')}</div>`}</div></div>`;
   $('startTrainingBtn').classList.toggle('hidden',!!active);$('resetTrainingBtn').classList.toggle('hidden',!active);
 }
-function startTraining(){ const m=state.analytics.mistakes[0],tg=trainingTargetFor(m,state.analytics.primaryRole);if(!tg)return;const latest=state.matches[0];localStorage.setItem(trainingStorageKey(),JSON.stringify({...tg,startMatchId:String(latest?.match_id||0),startTime:Number(latest?.start_time||0),startedAt:Date.now()}));renderTraining(); }
-function resetTraining(){ localStorage.removeItem(trainingStorageKey());renderTraining(); }
+function startTraining(){ const m=state.analytics.mistakes[0],tg=trainingTargetFor(m,state.analytics.primaryRole);if(!tg)return;const latest=state.matches[0];localStorage.setItem(trainingStorageKey(),JSON.stringify({...tg,startMatchId:String(latest?.match_id||0),startTime:Number(latest?.start_time||0),startedAt:Date.now()}));queueRemoteUserStateSync();renderTraining(); }
+function resetTraining(){ localStorage.removeItem(trainingStorageKey());queueRemoteUserStateSync();renderTraining(); }
 function renderProgress(){
   const p=state.analytics.progress,defs=[[t('winrateLabel'),'wr',v=>fmtPct(v,0),true],['KDA','kda',v=>v.toFixed(2),true],[t('deathsLabel'),'deaths',v=>v.toFixed(1),false],['GPM','gpm',v=>Math.round(v),true],['XPM','xpm',v=>Math.round(v),true],[t('coachScore'),'score',v=>Math.round(v),true]];
   const scoreDelta=p.current.score-p.previous.score,headline=scoreDelta>3?t('progressImproved'):scoreDelta<-3?t('progressRegressed'):t('progressStable'),headCls=scoreDelta>3?'up':scoreDelta<-3?'down':'neutral';
@@ -1017,7 +1087,7 @@ document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>switchSection(b.
 els.load.onclick=loadPlayer;els.refresh.onclick=()=>loadPlayer();if(els.steamLoad)els.steamLoad.onclick=handleSteamLoad;
 els.resultFilter.onchange=renderMatches;els.roleFilter.onchange=renderMatches;els.exportBtn.onclick=exportAnalytics;els.ratingBtn.onclick=openRatingSettings;els.switchProfile.onclick=logoutSteam;$('benchmarkLoadBtn').onclick=loadBenchmark;$('benchmarkHero').onchange=()=>{state.benchmark.data=null;renderBenchmarkSetup();$('benchmarkResults').innerHTML='';};$('benchmarkRole').onchange=()=>{state.benchmark.data=null;$('benchmarkResults').innerHTML='';};$('benchmarkPeerSkill').onchange=()=>{$('benchmarkPeerSkill').dataset.touched='1';state.benchmark.data=null;$('benchmarkResults').innerHTML='';};$('benchmarkDuration').onchange=()=>{$('benchmarkDuration').dataset.touched='1';state.benchmark.durationMode=$('benchmarkDuration').value;state.benchmark.data=null;$('benchmarkResults').innerHTML='';};
 $('startTrainingBtn').onclick=startTraining;$('resetTrainingBtn').onclick=resetTraining;$('langRu').onclick=()=>setLanguage('ru');$('langEn').onclick=()=>setLanguage('en');$('authLangRu').onclick=()=>setLanguage('ru');$('authLangEn').onclick=()=>setLanguage('en');
-$('saveJournal').onclick=()=>{localStorage.setItem(journalStorageKey(),$('journal').value);$('journalSaved').textContent=t('saved');setTimeout(()=>$('journalSaved').textContent='',1300);};
+$('saveJournal').onclick=()=>{localStorage.setItem(journalStorageKey(),$('journal').value);queueRemoteUserStateSync();$('journalSaved').textContent=t('saved');setTimeout(()=>$('journalSaved').textContent='',1300);};
 $('modalClose').onclick=()=>{$('modalBackdrop').classList.add('hidden');els.modalBox.classList.remove('match-modal');};$('modalBackdrop').onclick=e=>{if(e.target.id==='modalBackdrop'){$('modalBackdrop').classList.add('hidden');els.modalBox.classList.remove('match-modal');}};
 $('authLoginBtn').onclick=authenticateAndLoad;if($('authForgetBtn'))$('authForgetBtn').onclick=clearRememberedAuth;
 
