@@ -1,0 +1,69 @@
+function remoteStorageSnapshot(){
+  const trainingKey=state.accountId?`dotaSkillLab.training.${state.accountId}`:null;
+  const journalKey=`dotaSkillLab.journal.${state.accountId||'guest'}`;
+  let training=null;
+  try{training=trainingKey?JSON.parse(localStorage.getItem(trainingKey)||'null'):null;}catch{}
+  return {
+    role_overrides: state.roleOverrides||{},
+    rating_manual: state.ratingManual||{},
+    training,
+    journal: localStorage.getItem(journalKey)||'',
+    preferences: {
+      language: state.lang,
+      scope: state.scope,
+      history_limit: Number(els.historyLimit?.value||localStorage.getItem('dotaSkillLab.historyLimit')||50)
+    }
+  };
+}
+function applyRemoteState(remote){
+  if(!remote||!state.accountId)return;
+  const roles=(remote.role_overrides&&typeof remote.role_overrides==='object')?remote.role_overrides:{};
+  const rating=(remote.rating_manual&&typeof remote.rating_manual==='object')?remote.rating_manual:{};
+  localStorage.setItem(`dotaSkillLab.roles.${state.accountId}`,JSON.stringify(roles));
+  localStorage.setItem(`dotaSkillLab.rating.${state.accountId}`,JSON.stringify(rating));
+  const tk=`dotaSkillLab.training.${state.accountId}`;
+  if(remote.training) localStorage.setItem(tk,JSON.stringify(remote.training)); else localStorage.removeItem(tk);
+  localStorage.setItem(`dotaSkillLab.journal.${state.accountId}`,String(remote.journal||''));
+  const pref=remote.preferences||{};
+  if(['ru','en'].includes(pref.language)){state.lang=pref.language;localStorage.setItem('dotaSkillLab.lang',pref.language);}
+  if(['ranked','all'].includes(pref.scope)){state.scope=pref.scope;localStorage.setItem('dotaSkillLab.matchScope',pref.scope);}
+  const lim=String(pref.history_limit||'');
+  if(['50','100','200'].includes(lim)){localStorage.setItem('dotaSkillLab.historyLimit',lim);if(els.historyLimit)els.historyLimit.value=lim;}
+  if(els.matchScope)els.matchScope.value=state.scope==='all'?'all':'ranked';
+  loadRoleOverrides();loadRatingManual();
+}
+async function loadRemoteUserState(){
+  if(!state.accountId)return false;
+  try{
+    const data=await fetchJson('/api/user-state');
+    state.remoteState={available:!!data.available,loaded:true,found:!!data.found,syncing:false,updatedAt:data.updated_at||null};
+    if(!data.available)return false;
+    if(data.found&&data.state){applyRemoteState(data.state);return true;}
+    loadRoleOverrides();loadRatingManual();
+    await saveRemoteUserState(true);
+    return false;
+  }catch(e){
+    console.warn('Remote user state unavailable:',e);
+    state.remoteState={...state.remoteState,available:false,loaded:true,syncing:false};
+    return false;
+  }
+}
+let remoteSyncTimer=null;
+function queueRemoteUserStateSync(delay=500){
+  if(!state.accountId)return;
+  clearTimeout(remoteSyncTimer);
+  remoteSyncTimer=setTimeout(()=>saveRemoteUserState(false),delay);
+}
+async function saveRemoteUserState(force=false){
+  if(!state.accountId||state.remoteState.syncing)return false;
+  if(!force&&state.remoteState.loaded&&!state.remoteState.available)return false;
+  state.remoteState.syncing=true;
+  try{
+    const r=await fetch('/api/user-state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(remoteStorageSnapshot())});
+    const text=await r.text();let data={};try{data=text?JSON.parse(text):{};}catch{}
+    if(!r.ok)throw Object.assign(new Error(data.error||`HTTP ${r.status}`),{status:r.status});
+    state.remoteState={available:!!data.available,loaded:true,found:true,syncing:false,updatedAt:data.updated_at||null};
+    return !!data.available;
+  }catch(e){console.warn('Remote user state save failed:',e);state.remoteState.syncing=false;return false;}
+}
+
