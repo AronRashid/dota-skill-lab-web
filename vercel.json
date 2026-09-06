@@ -2,6 +2,10 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api/steam/bundle",
+      "destination": "/api/bundle20.js"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/index.js?__dsl_path=:path*"
     }
@@ -27,6 +31,10 @@
   ],
   "functions": {
     "api/index.js": {
+      "maxDuration": 300,
+      "memory": 1024
+    },
+    "api/bundle20.js": {
       "maxDuration": 300,
       "memory": 1024
     }
