@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dota Skill Lab — Web Beta</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="auth-gate" id="authGate">
+    <div class="auth-card steam-auth-card">
+      <div class="auth-top">
+        <div class="brand auth-brand"><div class="brand-mark">D</div><div><strong>Dota Skill Lab</strong><span data-i18n="authVersion">Web Beta · Steam Login</span></div></div>
+        <div class="lang-switch"><button class="lang-btn active" id="authLangRu" type="button">RU</button><button class="lang-btn" id="authLangEn" type="button">EN</button></div>
+      </div>
+      <div class="eyebrow" data-i18n="authEyebrow">Безопасный вход</div>
+      <h1 data-i18n="authTitle">Войдите через Steam</h1>
+      <p class="muted" data-i18n="authDesc">Dota Skill Lab получит только подтверждённый Steam ID и публичные игровые данные. Пароль вводится только на стороне Steam.</p>
+      <div class="auth-steps steam-auth-steps">
+        <div class="auth-step"><span>1</span><div data-i18n="authStep1">Авторизация на Steam</div></div>
+        <div class="auth-step"><span>2</span><div data-i18n="authStep2">Проверка истории Dota 2</div></div>
+        <div class="auth-step"><span>3</span><div data-i18n="authStep3">Создание Player Model</div></div>
+      </div>
+      <button class="primary auth-login steam-signin" id="authLoginBtn" type="button">
+        <span class="steam-signin-mark">S</span><span data-i18n="authLogin">Войти через Steam</span>
+      </button>
+      <div class="auth-load-pipeline hidden" id="authLoadPipeline" aria-live="polite">
+        <div class="load-stage" data-stage="connect"><i></i><span data-i18n="loadStageConnect">Steam аккаунт подтверждён</span></div>
+        <div class="load-stage" data-stage="history"><i></i><span data-i18n="loadStageHistory">История и детали матчей</span></div>
+        <div class="load-stage" data-stage="analytics"><i></i><span data-i18n="loadStageAnalytics">Роли и аналитическая модель</span></div>
+        <div class="load-stage" data-stage="ready"><i></i><span data-i18n="loadStageReady">Профиль готов</span></div>
+      </div>
+      <div class="auth-error hidden" id="authError"></div>
+      <div class="steam-trust-note">
+        <strong data-i18n="authTrustTitle">Пароль Steam не передаётся Dota Skill Lab.</strong>
+        <span data-i18n="authKeyNote">Авторизация выполняется на steamcommunity.com. Steam Web API key хранится только на сервере приложения.</span>
+      </div>
+      <input id="authPlayerInput" type="hidden" /><input id="authSteamKey" type="hidden" /><input id="authRemember" type="checkbox" class="hidden" />
+      <button class="link-btn hidden" id="authForgetBtn" type="button">Reset</button>
+    </div>
+  </div>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">D</div>
+        <div><strong>Dota Skill Lab</strong><span data-i18n="brandSubtitle">Product UI Final</span></div>
+      </div>
+      <nav>
+        <div class="nav-group-label" data-i18n="navGroupToday">Сегодня</div>
+        <button class="nav-item active" data-section="overview" data-i18n="navOverview">Обзор</button>
+        <button class="nav-item" data-section="coach" data-i18n="navCoach">Тренер</button>
+        <div class="nav-group-label" data-i18n="navGroupAnalysis">Анализ</div>
+        <button class="nav-item" data-section="deep" data-i18n="navDeep">Глубокий разбор</button>
+        <button class="nav-item" data-section="matches" data-i18n="navMatches">Матчи</button>
+        <button class="nav-item" data-section="patterns" data-i18n="navPatterns">Паттерны</button>
+        <button class="nav-item" data-section="sessions" data-i18n="navSessions">Сессии</button>
+        <button class="nav-item" data-section="benchmark" data-i18n="navBenchmark">Сравнение</button>
+        <button class="nav-item" data-section="heroes" data-i18n="navHeroes">Герои</button>
+        <button class="nav-item" data-section="mistakes" data-i18n="navMistakes">Ошибки</button>
+        <div class="nav-group-label" data-i18n="navGroupGrowth">Развитие</div>
+        <button class="nav-item" data-section="training" data-i18n="navTraining">Тренировка</button>
+        <button class="nav-item" data-section="progress" data-i18n="navProgress">Прогресс</button>
+      </nav>
+      <div class="sidebar-card">
+        <div class="label" data-i18n="analysisMethod">Метод анализа</div>
+        <strong data-i18n="analysisMethodShort">Рейтинг + роли + персональная база сравнения</strong>
+        <p data-i18n="analysisMethodDesc">По умолчанию анализируются только рейтинговые матчи. Все выводы привязаны к роли, выборке и уровню уверенности.</p>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div><div class="eyebrow" data-i18n="personalCoach">Личный тренер по Dota 2</div><h1 data-i18n="dashboardTitle">Панель развития игрока</h1></div>
+        <div class="topbar-actions">
+          <div class="lang-switch" aria-label="Language">
+            <button class="lang-btn active" id="langRu" type="button">RU</button>
+            <button class="lang-btn" id="langEn" type="button">EN</button>
+          </div>
+          <div class="connection-pill" id="connectionStatus" data-i18n="connecting">Подключение…</div>
+        </div>
+      </header>
+
+      <section class="setup-card" id="setupCard">
+        <div>
+          <h2 data-i18n="profileDepth">Профиль и глубина анализа</h2>
+          <p data-i18n="setupDesc">Для тренерской аналитики рекомендуем 200 последних рейтинговых матчей. Обычные матчи можно включить отдельно.</p>
+        </div>
+        <div class="setup-row">
+          <input id="playerInput" value="" type="hidden" />
+          <select id="historyLimit" title="History">
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+          </select>
+          <select id="matchScope" title="Match scope">
+            <option value="ranked" selected data-i18n-option="scopeRanked">Только рейтинговые</option>
+            <option value="all" data-i18n-option="scopeAll">Все матчи</option>
+          </select>
+          <button class="primary" id="loadBtn" data-i18n="loadAnalytics">Загрузить аналитику</button>
+        </div>
+        <div class="hint" data-i18n="rankedHint">При выборе рейтинговых матчей сервер пролистывает историю до тех пор, пока не соберёт указанное количество таких игр.</div>
+        <div id="sourceStatus" class="source-status" data-i18n="checkingSources">Проверяю источники…</div>
+      </section>
+
+      <section class="steam-card hidden web-beta-disabled" id="steamFallback">
+        <div class="steam-card-head">
+          <div><div class="eyebrow" data-i18n="mainSource">Основной источник</div><h3>Steam Web API</h3><p id="steamReason" data-i18n="steamReason">Нужен ваш ключ Steam Web API.</p></div>
+          <span class="provider-badge">STEAM</span>
+        </div>
+        <div class="setup-row">
+          <input id="steamKeyInput" type="password" autocomplete="off" placeholder="Steam Web API key" />
+          <button class="secondary" id="steamLoadBtn" data-i18n="loadViaSteam">Загрузить через Steam</button>
+        </div>
+        <label class="remember-row"><input type="checkbox" id="rememberSteamKey" /> <span data-i18n="rememberKey">Сохранить ключ только в этом браузере</span></label>
+        <div class="hint"><strong data-i18n="doNotSendKey">Ключ в чат не отправляйте.</strong> <span data-i18n="keyLocal">Он используется локально для запросов к api.steampowered.com.</span></div>
+      </section>
+
+      <div id="errorBox" class="error-box hidden"></div>
+
+      <section class="profile-strip hidden" id="profileStrip">
+        <div class="profile-main">
+          <img id="avatar" alt="avatar" />
+          <div><div class="profile-name" id="profileName">Игрок</div><div class="muted" id="profileMeta"></div></div>
+        </div>
+        <div class="profile-actions">
+          <span class="dataset-chip" id="datasetChip">—</span>
+          <button class="secondary small" id="switchProfileBtn" data-i18n="switchProfile">Сменить профиль</button>
+          <button class="secondary small" id="ratingBtn" data-i18n="rankMmr">Ранг / MMR</button>
+          <button class="secondary small" id="exportBtn" data-i18n="exportJson">Экспорт JSON</button>
+          <button class="secondary" id="refreshBtn" data-i18n="refresh">Обновить</button>
+        </div>
+      </section>
+
+      <section class="content-section" id="overview">
+
+        <div class="hero-row">
+          <article class="panel cockpit-panel hero-card">
+            <div class="panel-title"><div><span class="eyebrow" data-i18n="startHere">Командный центр</span><h3 data-i18n="coachCockpitTitle">Ваш план на следующую игру</h3></div><span class="legend" data-i18n="guidedView">упрощённый фокус</span></div>
+            <div id="coachCockpit" class="cockpit-grid"></div>
+            <details class="focus-detail">
+              <summary><span data-i18n="cockpitFocusDetails">Подробнее о приоритете</span><span id="focusPriority" class="priority-badge">—</span></summary>
+              <div id="mainFocus" class="focus-content" data-i18n="loadingData">Загружаю данные…</div>
+            </details>
+          </article>
+        </div>
+        <div class="secondary-row">
+          <article class="panel quick-compare-panel">
+            <div class="panel-title"><div><span class="eyebrow" data-i18n="quickCompare">Быстрое сравнение</span><h3 data-i18n="quickCompareTitle">Последние 20 против предыдущих 20</h3></div><span class="legend" data-i18n="whatChanged">что изменилось</span></div>
+            <div id="quickCompare" class="compare-quick"></div>
+          </article>
+          <article class="panel insight-panel">
+            <div class="panel-title"><div><span class="eyebrow" data-i18n="recommendedRoute">Рекомендуемый маршрут</span><h3 data-i18n="whereToLook">Куда смотреть дальше</h3></div></div>
+            <div id="insightSummary" class="insight-summary"></div>
+          </article>
+        </div>
+        <div class="kpi-grid">
+          <article class="kpi-card"><span data-i18n="matchesAnalyzed">Матчей в анализе</span><strong id="kpiMatches">—</strong><small id="kpiDepth">—</small></article>
+          <article class="kpi-card"><span data-i18n="winrate">Винрейт</span><strong id="kpiWinrate">—</strong><small id="kpiRecord">—</small></article>
+          <article class="kpi-card"><span data-i18n="avgKda">Средний KDA</span><strong id="kpiKda">—</strong><small data-i18n="noWinLossDirect">победа/поражение не входит напрямую в оценку</small></article>
+          <article class="kpi-card"><span data-i18n="avgDeaths">Средние смерти</span><strong id="kpiDeaths">—</strong><small id="deathSignal">—</small></article>
+          <article class="kpi-card accent"><span data-i18n="coachScore">Оценка тренера</span><strong id="coachScore">—</strong><small data-i18n="last20VsHistory">последние 20 против вашей истории</small></article>
+          <article class="kpi-card"><span data-i18n="mainRole">Основная роль</span><strong id="kpiRole">—</strong><small id="roleConfidence">—</small></article>
+          <article class="kpi-card rank-card">
+            <span data-i18n="currentRank">Текущий ранг</span>
+            <div class="rank-card-inner"><div id="rankEmblem" class="rank-emblem uncalibrated"><div class="rank-gem"></div><div class="rank-stars"></div></div><div><strong class="rank-name" id="kpiRank">—</strong><small id="rankSource">—</small></div></div>
+          </article>
+          <article class="kpi-card"><span data-i18n="currentMmr">Текущий MMR</span><strong id="kpiMmr">—</strong><small id="mmrDeltaSummary">—</small></article>
+        </div>
+
+        <article class="panel dna-panel">
+          <div class="panel-title"><div><span class="eyebrow" data-i18n="playerDna">Профиль игрока</span><h3 data-i18n="currentFormProfile">Профиль текущей формы</h3></div><span class="legend" data-i18n="last20">последние 20 матчей</span></div>
+          <div id="dnaGrid" class="dna-grid"></div>
+          <p class="footnote" data-i18n="dnaNote">Индексы показывают текущую форму относительно вашей собственной истории, а не глобальный процентиль.</p>
+        </article>
+
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-title"><div><span class="eyebrow" data-i18n="form">Форма</span><h3 data-i18n="last20Matches">Последние 20 матчей</h3></div><span class="legend"><i class="win-dot"></i><span data-i18n="victoryShort">В</span> <i class="loss-dot"></i><span data-i18n="defeatShort">П</span></span></div>
+            <div class="match-trend" id="matchTrend"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-title"><div><span class="eyebrow" data-i18n="roleMixLabel">Распределение ролей</span><h3 data-i18n="roleDistribution">Распределение ролей</h3></div></div>
+            <div id="roleMix" class="role-mix"></div>
+          </article>
+        </div>
+
+        <div class="grid-2">
+          <article class="panel"><details class="chart-detail"><summary><span class="eyebrow" data-i18n="performanceLabel">Оценка игры</span><h3 data-i18n="recentMatchScoresDetail">Детально по каждому матчу</h3></summary><div class="bars" id="scoreBars"></div></details></article>
+          <article class="panel"><div class="panel-title"><div><span class="eyebrow" data-i18n="heroPoolLabel">Пул героев</span><h3 data-i18n="topHeroesBySample">Лучшие герои по объёму данных</h3></div></div><div id="topHeroes" class="hero-list"></div></article>
+        </div>
+      </section>
+
+
+      <section class="content-section hidden" id="coach">
+        <div class="section-header">
+          <div><span class="eyebrow" data-i18n="matchCoachEngine">Матч-тренер</span><h2 data-i18n="matchCoachTitle">Что вынести из последних игр</h2><div class="muted" data-i18n="matchCoachDesc">Сначала один вывод, затем доказательства. Без перегруза десятками метрик.</div></div>
+        </div>
+        <div class="coach-page-grid">
+          <article class="panel coach-latest-panel">
+            <div class="panel-title"><div><span class="eyebrow" data-i18n="latestMatchCoach">Последний матч</span><h3 data-i18n="latestMatchVerdict">Вердикт тренера</h3></div></div>
+            <div id="coachLatestMatch"></div>
+          </article>
+          <article class="panel coach-plan-panel">
+            <div class="panel-title"><div><span class="eyebrow" data-i18n="nextGamePlan">Следующая игра</span><h3 data-i18n="oneRuleNextGame">Одно правило на следующий матч</h3></div></div>
+            <div id="coachActionPlan"></div>
+          </article>
+        </div>
+        <article class="panel coach-review-panel">
+          <div class="panel-title"><div><span class="eyebrow" data-i18n="reviewQueue">Очередь разбора</span><h3 data-i18n="matchesWorthReviewing">Какие матчи стоит открыть</h3></div><span class="legend" data-i18n="recentTen">последние 10</span></div>
+          <div id="coachReviewQueue" class="coach-review-list"></div>
+        </article>
+        <article class="panel coach-recent-panel">
+          <div class="panel-title"><div><span class="eyebrow" data-i18n="recentCoachCards">Последние матчи</span><h3 data-i18n="recentCoachSummary">Короткий тренерский итог</h3></div></div>
+          <div id="coachRecentMatches" class="coach-match-cards"></div>
+        </article>
+      </section>
+
+      <section class="content-section hidden" id="deep">
+        <div class="section-header">
+          <div><span class="eyebrow" data-i18n="deepEngine">Deep Match Lab</span><h2 data-i18n="deepTitle">Что происходило внутри матча</h2><div class="muted" data-i18n="deepDesc">Сначала показываем подтверждённые данные Steam. Если доступен разобранный матч, автоматически добавляем временные ряды, покупки, вижен и teamfight.</div></div>
+          <div id="deepSourceStatus" class="deep-source-pill">—</div>
+        </div>
+        <div class="notice" data-i18n-html="deepNotice">Точные события требуют <strong>parsed replay</strong>. На корпоративной сети этот источник может быть недоступен; тогда раздел остаётся в режиме Steam-only и не делает предположений о точных минутах смертей или перемещениях.</div>
+        <article class="panel deep-controls-panel">
+          <div class="deep-controls">
+            <label><span data-i18n="deepSelectMatch">Матч для глубокого разбора</span><select id="deepMatchSelect"></select></label>
+            <button class="primary" id="deepLoadBtn" data-i18n="deepLoad">Разобрать матч</button>
+          </div>
+        </article>
+        <div id="deepResults" class="deep-results"><div class="notice" data-i18n="deepChoose">Выберите матч и нажмите «Разобрать матч».</div></div>
+      </section>
+
+      <section class="content-section hidden" id="matches">
+        <div class="section-header">
+          <div><span class="eyebrow" data-i18n="matches">Матчи</span><h2 data-i18n="historyPerformance">История и оценка игры</h2><div class="muted" id="matchesSortNote"></div></div>
+          <div class="filters">
+            <select id="resultFilter"><option value="all" data-i18n-option="allResults">Все результаты</option><option value="win" data-i18n-option="wins">Победы</option><option value="loss" data-i18n-option="losses">Поражения</option></select>
+            <select id="roleFilter"><option value="all" data-i18n-option="allRoles">Все роли</option><option value="1">Pos 1</option><option value="2">Pos 2</option><option value="3">Pos 3</option><option value="4">Pos 4</option><option value="5">Pos 5</option></select>
+          </div>
+        </div>
+        <div class="notice" data-i18n="matchOpenHint">Нажмите «Открыть матч», чтобы увидеть оба пика, счёт, всех 10 игроков, предметы и полную доступную статистику матча.</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th data-i18n="match">Матч</th><th data-i18n="hero">Герой</th><th data-i18n="role">Роль</th><th data-i18n="result">Результат</th><th class="mmr-delta-col" data-i18n="mmrDelta">Изм. MMR</th><th data-i18n="scoreLabel">Оценка</th><th>K/D/A</th><th>GPM</th><th>XPM</th><th data-i18n="date">Дата</th><th></th></tr></thead>
+            <tbody id="matchesBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="content-section hidden" id="patterns">
+        <div class="section-header"><div><span class="eyebrow" data-i18n="patternEngine">Движок паттернов</span><h2 data-i18n="personalThresholds">Персональные пороги и связи с результатом</h2></div></div>
+        <div class="notice" data-i18n-html="patternNotice">Это <strong>статистические связи</strong>, а не доказательство причины поражения. Чем больше выборка, тем выше доверие к выводу.</div>
+        <div class="notice calibration-note" id="patternCalibrationNote"></div>
+        <div id="patternSummary" class="pattern-grid"></div>
+        <article class="panel"><div class="panel-title"><div><span class="eyebrow" data-i18n="heroRolePatterns">Герой + роль</span><h3 data-i18n="heroRoleFindings">Сильнейшие паттерны по вашим героям</h3></div></div><div id="heroRolePatterns" class="pattern-list"></div></article>
+      </section>
+
+      <section class="content-section hidden" id="sessions">
+        <div class="section-header"><div><span class="eyebrow" data-i18n="sessionAnalytics">Анализ сессий</span><h2 data-i18n="sessionTitle">Как меняется качество игры внутри сессии</h2></div></div>
+        <div id="sessionKpis" class="progress-grid session-kpis"></div>
+        <div class="grid-2">
+          <article class="panel"><div class="panel-title"><div><span class="eyebrow" data-i18n="gameInSession">Номер игры в сессии</span><h3 data-i18n="sessionPositionTitle">Результаты по порядку игр</h3></div></div><div id="sessionPositionTable"></div></article>
+          <article class="panel"><div class="panel-title"><div><span class="eyebrow" data-i18n="afterLosses">После поражений</span><h3 data-i18n="lossStreakTitle">Следующая игра после серии поражений</h3></div></div><div id="lossStreakTable"></div></article>
+        </div>
+        <article class="panel"><div class="panel-title"><div><span class="eyebrow" data-i18n="sessionCoach">Рекомендация по сессиям</span><h3 data-i18n="sessionRecommendation">Что показывает ваша статистика</h3></div></div><div id="sessionRecommendationBox" class="focus-content"></div></article>
+      </section>
+
+      <section class="content-section hidden" id="benchmark">
+        <div class="section-header"><div><span class="eyebrow" data-i18n="benchmarkEngine">Внешняя база сравнения</span><h2 data-i18n="benchmarkTitle">Вы против игроков вашего уровня и очень высокого уровня</h2></div><div id="benchmarkStatus" class="muted"></div></div>
+        <div class="notice" data-i18n-html="benchmarkNotice">Сравнение строится по публичным рейтинговым матчам Steam для того же героя и роли.</div>
+        <article class="panel benchmark-controls">
+          <div class="benchmark-controls-grid">
+            <label><span data-i18n="benchmarkHero">Герой</span><select id="benchmarkHero"></select></label>
+            <label><span data-i18n="benchmarkRole">Роль</span><select id="benchmarkRole"><option value="1">Pos 1</option><option value="2">Pos 2</option><option value="3">Pos 3</option><option value="4">Pos 4</option><option value="5">Pos 5</option></select></label>
+            <label><span data-i18n="peerBracket">Ваш уровень</span><select id="benchmarkPeerSkill"><option value="auto" data-i18n-option="bracketAuto">Авто по медали</option><option value="1" data-i18n-option="bracketNormal">Обычный skill</option><option value="2" data-i18n-option="bracketHigh">Высокий skill</option><option value="3" data-i18n-option="bracketVeryHigh">Очень высокий skill</option></select></label>
+            <label><span data-i18n="benchmarkDuration">Длительность</span><select id="benchmarkDuration"><option value="auto" data-i18n-option="durationAuto">Авто по вашим играм</option><option value="all" data-i18n-option="durationAll">Любая</option><option value="lt25" data-i18n-option="durationLt25">до 25 мин</option><option value="25_35" data-i18n-option="duration25_35">25–35 мин</option><option value="35_45" data-i18n-option="duration35_45">35–45 мин</option><option value="45p" data-i18n-option="duration45p">45+ мин</option></select></label>
+            <button class="primary" id="benchmarkLoadBtn" data-i18n="benchmarkLoad">Загрузить сравнение</button>
+          </div>
+        </article>
+        <div id="benchmarkResults"></div>
+      </section>
+
+      <section class="content-section hidden" id="heroes">
+        <div class="section-header"><div><span class="eyebrow" data-i18n="heroCoach">Тренер по героям</span><h2 data-i18n="heroesConsistency">Герои и устойчивость результатов</h2></div></div>
+        <div class="notice" data-i18n-html="heroRoleGapNotice">V11 сравнивает каждую связку <strong>герой + роль</strong> с вашей собственной базой на той же роли и, где возможно, с матчами похожей длительности.</div>
+        <article class="panel hero-role-lab-panel">
+          <div class="panel-title"><div><span class="eyebrow" data-i18n="heroRoleLab">Hero / Role Lab</span><h3 data-i18n="heroRoleGapTitle">Где конкретный герой сильнее или слабее вашей нормы на этой роли</h3></div><span class="legend" data-i18n="durationNormalized">с поправкой на длительность</span></div>
+          <div id="heroRoleGapTable"></div>
+        </article>
+        <div class="hero-grid" id="heroesGrid"></div>
+      </section>
+
+      <section class="content-section hidden" id="mistakes">
+        <div class="section-header"><div><span class="eyebrow" data-i18n="mistakeEngine">Движок ошибок</span><h2 data-i18n="repeatingPatterns">Повторяющиеся паттерны</h2></div></div>
+        <div class="notice" data-i18n-html="mistakeNotice">Важно: v11 показывает <strong>статистические ассоциации</strong>, а не доказывает причинность. Анализ строится на выбранном наборе матчей.</div>
+        <div id="mistakesSummary" class="mistake-list"></div>
+        <article class="panel">
+          <div class="panel-title"><div><span class="eyebrow" data-i18n="matchReview">Разбор матча</span><h3 id="analysisTitle" data-i18n="selectMatch">Выберите матч</h3></div></div>
+          <div id="matchAnalysis" class="analysis-placeholder" data-i18n="selectMatchHint">Откройте матч в разделе «Матчи» и выберите «Анализ ошибок».</div>
+        </article>
+      </section>
+
+      <section class="content-section hidden" id="training">
+        <div class="section-header"><div><span class="eyebrow" data-i18n="trainingCoach">Тренировочный тренер</span><h2 data-i18n="oneGoalAtTime">Одна задача за раз</h2></div></div>
+        <div class="grid-2">
+          <article class="panel training-panel">
+            <div class="panel-title"><div><span class="eyebrow" data-i18n="activeBlock">Активный блок</span><h3 id="trainingTitle">—</h3></div><span id="trainingState" class="priority-badge">—</span></div>
+            <div id="trainingBody"></div>
+            <button class="primary small" id="startTrainingBtn" data-i18n="startFive">Начать блок на 5 матчей</button>
+            <button class="secondary small hidden" id="resetTrainingBtn" data-i18n="resetBlock">Сбросить блок</button>
+          </article>
+          <article class="panel">
+            <h3 data-i18n="personalJournal">Личный журнал</h3>
+            <p class="muted" data-i18n="journalHint">После игровой сессии фиксируйте один вывод, который можно проверить в следующих матчах.</p>
+            <textarea id="journal"></textarea>
+            <button class="primary small" id="saveJournal" data-i18n="saveNote">Сохранить заметку</button><span id="journalSaved" class="save-state"></span>
+          </article>
+        </div>
+      </section>
+
+      <section class="content-section hidden" id="progress">
+        <div class="section-header"><div><span class="eyebrow" data-i18n="progressLabel">Прогресс</span><h2 data-i18n="last20VsPrevious">Последние 20 против предыдущих 20</h2></div></div>
+        <div id="progressGrid" class="progress-grid"></div>
+        <div class="grid-2">
+          <article class="panel"><div class="panel-title"><div><span class="eyebrow" data-i18n="trendLabel">Динамика</span><h3 data-i18n="coachScoreBlocks">Оценка тренера по блокам из 10 матчей</h3></div></div><div id="blockTrend" class="block-trend"></div></article>
+          <article class="panel"><div class="panel-title"><div><span class="eyebrow" data-i18n="dataQuality">Качество данных</span><h3 data-i18n="findingReliability">Надёжность текущих выводов</h3></div></div><div id="confidencePanel"></div></article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="modalBackdrop">
+    <div class="modal" id="modalBox">
+      <button class="modal-close" id="modalClose">×</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
