@@ -1,0 +1,40 @@
+name: Finalize Dota Skill Lab beta
+
+on:
+  push:
+    paths:
+      - '.github/workflows/finalize-beta.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply final optimization patch
+        run: node scripts/finalize-beta.mjs
+      - name: Validate JavaScript
+        run: |
+          node --check api/index.js
+          node --check app.js
+      - name: Sanity check final markers
+        run: |
+          grep -q "web-beta-3-final" api/index.js
+          grep -q "readPersistentMatchCacheBatch" api/index.js
+          grep -q "mobile/navigation polish" styles.css
+      - name: Commit final beta
+        run: |
+          if git diff --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git config user.name "dota-skill-lab-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add api/index.js app.js styles.css index.html
+          git commit -m "Finalize beta: batch cache and mobile navigation"
+          git push
