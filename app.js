@@ -296,9 +296,31 @@ Object.assign(I18N.en,{
 
 const t = key => I18N[state.lang]?.[key] ?? I18N.ru[key] ?? key;
 
+Object.assign(I18N.ru, {
+  matchOpenHint:'Откройте разбор: вывод тренера, сильные стороны и одно правило на следующую игру.',
+  welcomeTitle:'От анализа — к следующей игре', welcomeStart:'Посмотреть мой план', profileSettings:'Профиль и настройки', moreNav:'Ещё', closeNav:'Закрыть меню',
+  brandSubtitle:'Персональный Dota-тренер', authVersion:'Персональная система развития',
+  authStep1:'Анализируем рейтинговые матчи', authStep2:'Находим повторяющиеся ошибки', authStep3:'Даём одну задачу на 5 игр',
+  authKeyNote:'Вход на steamcommunity.com. Мы используем только публичные игровые данные.',
+  noFilteredMatches:'Нет матчей с этими фильтрами. Попробуйте другой результат или роль.',
+  openMatch:'Открыть разбор', retryReview:'Повторить загрузку', currentForm:'Текущая форма',
+  insufficientComparison:'Нужно 40 матчей для сравнения двух полных блоков по 20.',
+  focusPriorityNow:'Главный приоритет', matchDuration:'Длительность'
+});
+Object.assign(I18N.en, {
+  matchOpenHint:'Open a review for the coach verdict, your strengths and one rule for the next game.',
+  welcomeTitle:'From analysis to your next game', welcomeStart:'See my plan', profileSettings:'Profile & settings', moreNav:'More', closeNav:'Close menu',
+  brandSubtitle:'Your personal Dota coach', authVersion:'Personal improvement system',
+  authStep1:'Analyze ranked matches', authStep2:'Find recurring mistakes', authStep3:'One quest for your next 5 games',
+  authKeyNote:'Sign in at steamcommunity.com. We use public game data only.',
+  noFilteredMatches:'No matches with these filters. Try another result or role.',
+  openMatch:'Open review', retryReview:'Try again', currentForm:'Current form',
+  insufficientComparison:'40 matches are needed to compare two full blocks of 20.',
+  focusPriorityNow:'Main priority', matchDuration:'Duration'
+});
 function applyI18n(){
   document.documentElement.lang = state.lang;
-  document.title = `Dota Skill Lab — ${state.lang==='ru'?'Web Beta':'Web Beta'}`;
+  document.title = 'Dota Skill Lab — '+t('brandSubtitle');
   document.querySelectorAll('[data-i18n]').forEach(el=>{ const k=el.dataset.i18n; if(I18N[state.lang][k]!=null) el.textContent=t(k); });
   document.querySelectorAll('[data-i18n-html]').forEach(el=>{ const k=el.dataset.i18nHtml; if(I18N[state.lang][k]!=null) el.innerHTML=t(k); });
   document.querySelectorAll('[data-i18n-option]').forEach(el=>{ const k=el.dataset.i18nOption; if(I18N[state.lang][k]!=null) el.textContent=t(k); });
@@ -306,6 +328,8 @@ function applyI18n(){
   $('langEn').classList.toggle('active',state.lang==='en');
   if($('authLangRu'))$('authLangRu').classList.toggle('active',state.lang==='ru');
   if($('authLangEn'))$('authLangEn').classList.toggle('active',state.lang==='en');
+  $('resultFilter').setAttribute('aria-label',state.lang==='ru'?'Результат матча':'Match result');
+  $('roleFilter').setAttribute('aria-label',state.lang==='ru'?'Роль':'Role');
   $('journal').placeholder = state.lang==='ru' ? 'Например: на Pos 4 не заходить первым в туман после 20 минуты...' : 'Example: on Pos 4, do not enter fog first after minute 20...';
 }
 function setLanguage(lang){ if(!['ru','en'].includes(lang)) return; state.lang=lang; localStorage.setItem('dotaSkillLab.lang',lang); queueRemoteUserStateSync(); if(state.matches.length) renderAll(); else { applyI18n(); runDiagnostics(); } }
@@ -613,7 +637,13 @@ function recomputeAnalytics(){
 }
 
 async function fetchJson(url){ const r=await fetch(url,{headers:{Accept:'application/json'}});let data=null;try{data=await r.json();}catch{}if(!r.ok){const e=new Error(data?.details||data?.error||`HTTP ${r.status}`);e.status=r.status;e.upstreamStatus=data?.upstream_status;throw e;}return data; }
-function friendlyError(msg){ const s=String(msg||'');if(/private|status 15/i.test(s))return t('matchHistoryPrivate');if(/32 hexadecimal|32 символ/i.test(s))return t('invalidKey');return s; }
+function friendlyError(msg){
+  const s=String(msg||'');
+  if(/private|status 15/i.test(s))return t('matchHistoryPrivate')+' Dota 2 → Settings → Social → Expose Public Match Data';
+  if(/32 hexadecimal|32 символ/i.test(s))return t('invalidKey');
+  if(/timeout|timed out|50[0234]|failed to fetch|network/i.test(s))return state.lang==='ru'?'Сервис временно недоступен. Уже загруженные матчи остаются в профиле. Попробуйте ещё раз.':'The service is temporarily unavailable. Loaded matches remain in your profile. Please try again.';
+  return s;
+}
 async function runDiagnostics(){ if(IS_DIRECT_FILE)return;try{const d=await fetchJson('/api/diagnostics');state.diagnostics=d;if(d.steam?.ok){els.sourceStatus.className='source-status ok';els.sourceStatus.textContent=`${t('steamAvailable')}${d.opendota?.ok?` · ${t('opendotaAvailable')}`:` · ${t('opendotaBlocked')}`}`;}else{els.sourceStatus.className='source-status bad';els.sourceStatus.textContent=t('steamUnavailable');}}catch{els.sourceStatus.className='source-status warn';els.sourceStatus.textContent=t('networkDiagFailed');} }
 
 
@@ -635,17 +665,21 @@ async function loadViaSteam(id){
 async function loadPlayer(){
   clearError();if(IS_DIRECT_FILE)return showError(t('directFile'));
   const id=state.accountId||extractAccountId(els.input.value);if(!id)return showAuthGate();state.accountId=id;els.input.value=id;els.load.disabled=true;els.load.textContent=t('loading');
-  try{const bundle=await loadViaSteam(id);renderAll();loadJournal();els.status.textContent=`${t('steamAvailable')} · ${state.matches.length} ${t('matchesWord')}`;els.status.classList.add('online');els.setup.classList.add('hidden');els.steamFallback.classList.add('hidden');els.profileStrip.classList.remove('hidden');hideAuthGate();if(bundle.failed_matches>0)showError(state.lang==='ru'?`${bundle.failed_matches} матчей временно не загрузились; при обновлении сайт повторит попытку.`:`${bundle.failed_matches} match details failed temporarily and will be retried on refresh.`);}catch(e){console.error(e);if(e.status===401){showAuthGate(t('webSessionExpired'));return;}showError(`Steam API: ${friendlyError(e.message)}`);els.status.textContent=t('loadError');}finally{els.load.disabled=false;els.load.textContent=t('loadAnalytics');}
+  try{const bundle=await loadViaSteam(id);renderAll();loadJournal();els.status.textContent=`${t('steamAvailable')} · ${state.matches.length} ${t('matchesWord')}`;els.status.classList.add('online');els.setup.classList.add('hidden');els.steamFallback.classList.add('hidden');els.profileStrip.classList.remove('hidden');hideAuthGate();if(bundle.failed_matches>0)showError(state.lang==='ru'?`${bundle.failed_matches} матчей временно не загрузились; при обновлении сайт повторит попытку.`:`${bundle.failed_matches} match details failed temporarily and will be retried on refresh.`);}catch(e){console.error(e);if(e.status===401){showAuthGate(t('webSessionExpired'));return;}const message=friendlyError(e.message);showError(message);if(!$('authGate').classList.contains('hidden')){setAuthError(message);setLoadPipeline('history',false);$('authLoginBtn').disabled=false;$('authLoginBtn').querySelector('[data-i18n]').textContent=t('retryReview');$('authLoginBtn').onclick=loadPlayer;}els.status.textContent=t('loadError');}finally{els.load.disabled=false;els.load.textContent=t('loadAnalytics');}
 }
 async function handleSteamLoad(){return loadPlayer();}
 
 
 const AUTH_KEYS={remember:'dotaSkillLab.web.auth'};
-function setAuthError(msg=''){const el=$('authError');if(!el)return;el.textContent=msg;el.classList.toggle('hidden',!msg);}
+function setAuthError(msg=''){const el=$('authError');if(!el)return;el.textContent=msg;el.setAttribute('role','alert');el.classList.toggle('hidden',!msg);}
 function showAuthGate(msg=''){
-  const gate=$('authGate');if(!gate)return;gate.classList.remove('hidden');setAuthError(msg);setLoadPipeline('connect',false);
+  const gate=$('authGate');if(!gate)return;gate.classList.remove('hidden');document.querySelector('.shell').inert=true;setAuthError(msg);$('authLoginBtn').disabled=false;$('authLoginBtn').onclick=authenticateAndLoad;$('authLoginBtn').querySelector('[data-i18n]').textContent=t('authLogin');setLoadPipeline('connect',false);
 }
-function hideAuthGate(){if($('authGate'))$('authGate').classList.add('hidden');}
+function hideAuthGate(){
+  if($('authGate'))$('authGate').classList.add('hidden');
+  document.querySelector('.shell').inert=false;
+  $('welcomePanel').classList.toggle('hidden',!!localStorage.getItem('dotaSkillLab.welcome.'+state.accountId));
+}
 function persistAuth(){/* Steam session is stored in a secure HttpOnly cookie by the backend. */}
 async function clearRememberedAuth(){return logoutSteam();}
 async function authenticateAndLoad(){
@@ -666,7 +700,7 @@ async function bootstrapSteamAuth(){
 function journalStorageKey(){return `dotaSkillLab.journal.${state.accountId||'guest'}`;}
 function loadJournal(){const old=localStorage.getItem('dotaSkillLab.journal');const key=journalStorageKey();if(!localStorage.getItem(key)&&old&&state.accountId)localStorage.setItem(key,old);$('journal').value=localStorage.getItem(key)||'';}
 
-function renderAll(){ applyI18n();renderProfile();renderOverview();renderCoachPage();renderDeepSetup();renderMatches();renderPatterns();renderSessions();renderHeroes();renderMistakes();renderTraining();renderProgress();renderBenchmarkSetup();if(state.benchmark.data)renderBenchmark(); }
+function renderAll(){ applyI18n();renderProfile();els.status.textContent=`${t('steamAvailable')} · ${state.matches.length} ${t('matchesWord')}`;renderOverview();renderCoachPage();renderDeepSetup();renderMatches();renderPatterns();renderSessions();renderHeroes();renderMistakes();renderTraining();renderProgress();renderBenchmarkSetup();if(state.benchmark.data)renderBenchmark(); }
 function renderProfile(){ const p=state.profile?.profile||{};els.avatar.src=p.avatarfull||p.avatar||'';els.avatar.style.visibility='visible';els.avatar.onerror=()=>els.avatar.style.visibility='hidden';els.profileName.textContent=p.personaname||`${state.lang==='ru'?'Игрок':'Player'} ${state.accountId}`;const low=state.matches.filter(m=>roleConfidenceLevel(m)==='low').length;els.profileMeta.textContent=`Dota ID ${state.accountId} · ${t('sourceSteam')} · ${state.scope==='ranked'?t('scopeRanked'):t('scopeAll')}`;const scanned=state.bundleMeta?.scanned||state.matches.length;const itemSource=state.bundleMeta?.itemSource||'none';const itemLabel=itemSource==='dota2_datafeed'?t('itemCatalogSteam'):itemSource==='dotaconstants_fallback'?t('itemCatalogFallback'):t('itemCatalogMissing');const syncLabel=state.remoteState?.available?t('cloudSyncOn'):t('cloudSyncLocal');els.datasetChip.textContent=`${state.matches.length} ${t('matchesWord')} · ${t('scanned')} ${scanned} · ${low} ${t('lowRole')} · ${itemLabel} · ${syncLabel}`; }
 function renderOverview(){
   const ms=state.matches,a=state.analytics,w=ms.filter(isWin).length,r=currentRating();
@@ -714,25 +748,27 @@ function reviewSignal(m){
 }
 function renderCoachCockpit(){
   const host=$('coachCockpit'); if(!host) return;
+  if(!state.matches.length){host.innerHTML=`<div class="notice">${state.lang==='ru'?'Пока нет матчей для анализа. Откройте настройки, выберите «Все матчи» или проверьте доступность истории в Dota 2.':'No matches to analyze yet. Open settings, choose All matches, or check public match data in Dota 2.'}</div>`;return;}
   const a=state.analytics||{},focus=a.mistakes?.[0],latest=state.matches[0],snap=trainingSnapshot();
-  const now=state.matches.slice(0,20),prev=state.matches.slice(20,40),score=Math.round(avg(now,m=>m._score||50)),prevScore=prev.length?Math.round(avg(prev,m=>m._score||50)):score,scoreDelta=score-prevScore;
+  const now=state.matches.slice(0,20),prev=state.matches.slice(20,40),score=Math.round(avg(now,m=>m._score||50)),prevScore=prev.length?Math.round(avg(prev,m=>m._score||50)):score,scoreDelta=Math.round(avg(now,m=>m._score||50)-avg(prev,m=>m._score||50));
   const grade=performanceGrade(score),target=snap.tg?.label||t('noData'),progress=snap.results.length;
   const questDots=[0,1,2,3,4].map(i=>{const x=snap.results[i];return `<i class="quest-dot ${x?(x.pass?'pass':'fail'):''}" title="${x?(x.pass?t('pass'):t('miss')):`${t('gameWord')} ${i+1}`}"></i>`}).join('');
   const latestModel=latest?coachModelForMatch(latest):null,latestSignal=latest?reviewSignal(latest):null;
-  const focusName=focus?t(focus.titleKey):t('noData'),focusConfidence=focus?Math.round(focus.confidence):0;
+  const focusName=focus?t(focus.titleKey):(state.lang==='ru'?'Пока нет надёжного приоритета':'No reliable priority yet'),focusConfidence=focus?Math.round(focus.confidence):0;
   host.innerHTML=`
-    <div class="command-score-block">
+    <div class="command-score-block"><span class="form-label">${t('currentForm')}</span>
       <div class="score-ring" style="--score:${clamp(score)}"><div class="score-ring-inner"><b>${score}</b><span>${t('coachScoreShort')}</span></div></div>
       <div class="score-grade ${gradeClass(score)}"><strong>${grade}</strong><span>${t('gradeLabel')}</span></div>
-      <div class="score-trend ${scoreDelta>2?'up':scoreDelta<-2?'down':'flat'}"><b>${scoreDelta>0?'+':''}${scoreDelta}</b><span>${t('formTrend')} · 20 vs 20</span></div>
+      <div class="score-trend ${scoreDelta>2?'up':scoreDelta<-2?'down':'flat'}"><b>${now.length===20&&prev.length===20?(scoreDelta>0?'+':'')+scoreDelta:'—'}</b><span>${t('formTrend')} · 20 vs 20</span></div>
     </div>
     <div class="command-focus-block">
-      <div class="command-kicker"><span class="live-dot"></span>${snap.active?t('activeTrainingStatus'):t('currentQuest')}</div>
+      <div class="command-kicker"><span class="live-dot"></span>${t('focusPriorityNow')}</div>
       <h2>${safeText(focusName)}</h2>
-      <div class="focus-evidence"><span>${t('priorityLabel')} <b>${focus?focus.priority:'—'}/100</b></span><span>${t('confidence')} <b>${focusConfidence}%</b></span><span>${t('frequency')} <b>${focus?fmtPct(focus.frequency,0):'—'}</b></span></div>
-      <div class="quest-target"><span>${t('focusTarget')}</span><strong>${safeText(target)}</strong></div>
-      <div class="quest-progress-line"><div class="quest-dots">${questDots}</div><b>${progress}/5</b><span>${snap.status}</span></div>
-      <div class="command-actions"><button class="primary jump-btn" data-jump="training">${t('openTrainingTab')}</button><button class="secondary jump-btn" data-jump="patterns">${t('openPatternsTab')}</button></div>
+      <div class="focus-evidence ${focus?'':'hidden'}"><span>${t('priorityLabel')} <b>${focus?focus.priority:'—'}/100</b></span><span>${t('confidence')} <b>${focusConfidence}%</b></span><span>${t('frequency')} <b>${focus?fmtPct(focus.frequency,0):'—'}</b></span></div>
+      ${!focus?`<p class="muted">${state.lang==='ru'?'Проверьте роли в разборе матчей или загрузите больше игр в настройках.':'Check roles in match reviews or load more games in settings.'}</p>`:''}
+      <div class="quest-target ${focus?'':'hidden'}"><span>${t('focusTarget')}</span><strong>${safeText(target)}</strong></div>
+      <div class="quest-progress-line ${focus?'':'hidden'}"><div class="quest-dots">${questDots}</div><b>${progress}/5</b><span>${snap.status}</span></div>
+      <div class="command-actions"><button class="primary jump-btn" data-jump="${focus?'training':'matches'}">${focus?t('openTrainingTab'):t('openMatchesTab')}</button><button class="secondary jump-btn" data-jump="patterns">${t('openPatternsTab')}</button></div>
     </div>
     <div class="command-match-block">
       <div class="command-kicker">${t('lastMatchBrief')}</div>
@@ -747,6 +783,7 @@ function renderCoachCockpit(){
 function renderQuickCompare(){
   const host=$('quickCompare'); if(!host) return;
   const now=state.matches.slice(0,20), prev=state.matches.slice(20,40);
+  if(now.length<20||prev.length<20){host.innerHTML=`<div class="notice">${t('insufficientComparison')}</div>`;return;}
   if(!now.length){host.innerHTML=`<div class="notice">${t('noData')}</div>`; return;}
   const rows=[];
   const build=(label,cur,prv,higherBetter,digits=1,percent=false)=>{const meta=trendMeta(cur,prv,higherBetter); const fmtVal=v=>percent?fmtPct(v,digits):(Number.isFinite(v)?Number(v).toFixed(digits):'—'); rows.push(`<div class="compare-row"><span>${label}</span><b>${fmtVal(cur)}</b><b>${prev.length?fmtVal(prv):'—'}</b><span class="trend-chip ${meta.cls}">${meta.arrow} ${prev.length?(percent?fmtPct(meta.diff,digits):fmtDeltaNumber(meta.diff,digits)):t('stableState')}</span></div>`)};
@@ -760,7 +797,7 @@ function renderInsightSummary(){
   const host=$('insightSummary'); if(!host) return;
   const topHero=state.analytics?.heroes?.[0], focus=state.analytics?.mistakes?.[0], sessions=state.analytics?.sessions;
   const focusText=focus?`${t(focus.titleKey)} · ${t('focusPriorityLine')} ${focus.priority}/100`:`${t('noData')}`;
-  const sessionText=sessions?.recommendation||t('sessionRecommendation');
+  const sessionText=sessions?.recommendation?t(sessions.recommendation):t('sessionRecommendation');
   host.innerHTML = `
     <div class="route-step"><div><b>${t('routeStepTraining')}</b><p>${t('routeStepTrainingDesc')}</p><small>${focusText}</small></div><button class="secondary small jump-btn" data-jump="training">${t('openTrainingTab')}</button></div>
     <div class="route-step"><div><b>${t('routeStepMatches')}</b><p>${t('routeStepMatchesDesc')}</p><small>${topHero?`${t('topHeroLine')}: ${safeText(heroName(topHero.hero_id))} · ${roleName(topHero.mainRole)}`:''}</small></div><button class="secondary small jump-btn" data-jump="matches">${t('openMatchesTab')}</button></div>
@@ -886,13 +923,17 @@ function renderMatches(){
     tr.className=`match-row ${w?'match-win':'match-loss'} ${signal?.cls||''}`;
     tr.innerHTML=`<td><div class="match-id">#${m.match_id}</div><span class="${isRanked(m)?'ranked-badge':'unranked-badge'}">${isRanked(m)?t('ranked'):t('unranked')}</span></td>
     <td><div class="hero-cell match-hero-cell">${img?`<img src="${img}">`:''}<span>${safeText(heroName(m.hero_id))}</span></div></td>
-    <td><span class="role-badge" title="${t('roleSource')}: ${roleSourceLabel(m)} · ${confidenceLabel(m)}">${roleName(getRole(m))}${state.roleOverrides[String(m.match_id)]?'*':''}</span><span class="role-source">${roleSourceLabel(m)}</span></td>
+    <td><span class="role-badge" title="${t('roleSource')}: ${roleSourceLabel(m)} · ${confidenceLabel(m)}">${roleName(getRole(m))}${state.roleOverrides[String(m.match_id)]?'*':''}</span><span class="role-source">${roleSourceLabel(m)}${roleSource(m)==='manual'?'':` · ${Math.round(Number(m.role_confidence||0)*100)}%`}</span></td>
     <td><span class="result ${w?'win':'loss'}">${w?t('victory'):t('defeat')}</span></td>
     <td class="mmr-delta-col ${showDelta?'':'hidden-col'}">${delta==null?'—':`<b class="${delta>=0?'delta up':'delta down'}">${delta>=0?'+':''}${delta}</b>`}</td>
     <td><div class="performance-cell"><span class="match-grade ${gradeClass(score)}">${grade}</span><b>${score}</b>${signal?`<span class="review-flag ${signal.cls}" title="${safeText(t(signal.key))}">${signal.icon}</span>`:''}</div></td>
-    <td><b class="kda-cell">${m.kills}/${m.deaths}/${m.assists}</b></td><td>${m.gold_per_min||'—'}</td><td>${m.xp_per_min||'—'}</td><td>${dateFmt(m.start_time)}</td><td><button class="secondary small open-match" data-match="${m.match_id}">${t('openMatch')}</button></td>`;
+    <td><b class="kda-cell">${m.kills}/${m.deaths}/${m.assists}</b></td><td>${m.gold_per_min||'—'}</td><td>${m.xp_per_min||'—'}</td><td>${dateFmt(m.start_time)}<span class="match-duration">${duration(m.duration)}</span></td><td><button class="secondary small open-match" data-match="${m.match_id}">${t('openMatch')}</button></td>`;
+    const labels=['ID',t('heroPassport'),t('mainRole'),t('result'), 'MMR',t('scoreLabel'),'KDA','GPM','XPM',t('matchDuration'),''];
+    [...tr.cells].forEach((cell,i)=>cell.dataset.label=labels[i]);
+    tr.querySelectorAll('img').forEach(img=>{img.loading='lazy';img.alt='';});
     els.matchesBody.appendChild(tr);tr.addEventListener('dblclick',()=>openFullMatch(m.match_id));
   }
+  if(!list.length)els.matchesBody.innerHTML=`<tr><td colspan="11" class="empty-matches">${t('noFilteredMatches')}</td></tr>`;
   els.matchesBody.querySelectorAll('.open-match').forEach(b=>b.onclick=e=>{e.stopPropagation();openFullMatch(b.dataset.match);});
 }
 
@@ -926,12 +967,12 @@ function renderHeroRoleGapTable(){
 }
 function renderHeroes(){
   renderHeroRoleGapTable();els.heroesGrid.innerHTML='';
-  for(const h of state.analytics.heroes){const el=document.createElement('article');const pair=(state.analytics.heroRoles||[]).find(x=>x.hero_id===h.hero_id&&x.role===h.mainRole),best=pair?.strengths?.[0],weak=pair?.gaps?.[0],grade=performanceGrade(h.avgScore);el.className='hero-card hero-passport-card';el.innerHTML=`${heroImg(h.hero_id)?`<div class="hero-passport-art"><img src="${heroImg(h.hero_id)}"><span class="match-grade ${gradeClass(h.avgScore)}">${grade}</span></div>`:''}<div class="hero-card-body"><div class="hero-card-head"><div><span class="eyebrow">${t('heroPassport')}</span><h4>${safeText(heroName(h.hero_id))}</h4></div><span class="class-badge ${h.cls}">${heroClassLabel(h.classification)}</span></div><div class="hero-role-line">${roleName(h.mainRole)} · ${h.games} ${t('matchesWord')} · ${t('confidenceLabel')} ${h.confidence}%</div><div class="hero-stats compact"><div><span>${t('winrateLabel')}</span><strong>${fmtPct(h.wr,0)}</strong></div><div><span>${t('scoreLabel')}</span><strong>${Math.round(h.avgScore)}</strong></div><div><span>${t('roleFit')}</span><strong>${pair?Math.round(pair.fitScore):'—'}</strong></div><div><span>KDA</span><strong>${h.kda.toFixed(2)}</strong></div></div><div class="hero-gap-summary"><div class="good"><span>${t('bestMetric')}</span><b>${best?gapMetricLabel(best.metric):'—'}${best?` · ${Math.round(best.pct)}`:''}</b></div><div class="bad"><span>${t('weakestMetric')}</span><b>${weak?gapMetricLabel(weak.metric):'—'}${weak?` · ${Math.round(weak.pct)}`:''}</b></div></div></div>`;el.onclick=()=>openHero(h.hero_id);els.heroesGrid.appendChild(el);}
+  for(const h of state.analytics.heroes){const el=document.createElement('article');const pair=(state.analytics.heroRoles||[]).find(x=>x.hero_id===h.hero_id&&x.role===h.mainRole),best=pair?.strengths?.[0],weak=pair?.gaps?.[0],grade=performanceGrade(h.avgScore);el.className='hero-card hero-passport-card';el.innerHTML=`${heroImg(h.hero_id)?`<div class="hero-passport-art"><img src="${heroImg(h.hero_id)}"><span class="match-grade ${gradeClass(h.avgScore)}">${grade}</span></div>`:''}<div class="hero-card-body"><div class="hero-card-head"><div><span class="eyebrow">${t('heroPassport')}</span><h4>${safeText(heroName(h.hero_id))}</h4></div><span class="class-badge ${h.cls}">${heroClassLabel(h.classification)}</span></div><div class="hero-role-line">${roleName(h.mainRole)} · ${h.games} ${t('matchesWord')} · ${t('confidenceLabel')} ${h.confidence}%</div><div class="hero-stats compact"><div><span>${t('winrateLabel')}</span><strong>${fmtPct(h.wr,0)}</strong></div><div><span>${t('scoreLabel')}</span><strong>${Math.round(h.avgScore)}</strong></div><div><span>${t('roleFit')}</span><strong>${pair?Math.round(pair.fitScore):'—'}</strong></div><div><span>KDA</span><strong>${h.kda.toFixed(2)}</strong></div></div><div class="hero-gap-summary"><div class="good"><span>${t('bestMetric')}</span><b>${best?gapMetricLabel(best.metric):'—'}${best?` · ${Math.round(best.pct)}`:''}</b></div><div class="bad"><span>${t('weakestMetric')}</span><b>${weak?gapMetricLabel(weak.metric):'—'}${weak?` · ${Math.round(weak.pct)}`:''}</b></div></div></div>`;el.tabIndex=0;el.setAttribute('role','button');el.setAttribute('aria-label',heroName(h.hero_id));el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openHero(h.hero_id);}};el.querySelectorAll('img').forEach(img=>{img.alt='';img.loading='lazy';});el.onclick=()=>openHero(h.hero_id);els.heroesGrid.appendChild(el);}
 }
 function renderMistakes(){
   const list=state.analytics.mistakes,host=$('mistakesSummary');if(!list.length){host.innerHTML=`<div class="notice">${t('noData')}</div>`;return;}
   const active=getTraining();
-  host.innerHTML=list.slice(0,8).map((m,i)=>{
+  host.innerHTML=list.slice(0,3).map((m,i)=>{
     const isActive=active&&active.mistakeKey===m.key,status=isActive?t('activeTrainingStatus'):(m.confidence>=75?t('evidenceStatus'):t('watchStatus'));
     return `<div class="mistake-row ${i===0?'primary-mistake':''} ${m.priority>=65?'high':''}"><div class="mistake-rank">#${i+1}</div><div class="mistake-title"><div class="mistake-status ${isActive?'active':''}">${status}</div><strong>${t(m.titleKey)}</strong><span>${t(m.descKey)}</span>${i===0?`<button class="link-btn mistake-training-jump">${t('openTrainingTab')} →</button>`:''}</div><div class="mistake-metric"><b>${fmtPct(m.frequency,0)}</b><span>${t('frequency')} · ${m.count}/${m.eligible}</span></div><div class="mistake-metric"><b>${m.gap>0?`−${Math.round(m.gap*100)} ${t('percentagePoints')}`:'—'}</b><span>${t('associationLabel')}</span></div><div class="mistake-metric"><b>${m.priority}/100</b><span>${t('priorityLabel')} · ${t('confidence')} ${Math.round(m.confidence)}%</span><div class="impact-bar"><div class="impact-fill" style="width:${m.priority}%"></div></div></div></div>`;
   }).join('');
@@ -974,7 +1015,7 @@ async function openFullMatch(matchId){
       <details class="scoreboard-detail analysis-detail"><summary><div><span class="eyebrow">${t('advancedMetrics')}</span><strong>${t('matchReview')}</strong></div><span>▾</span></summary><div class="match-personal-review">${teamContextHtml(ctx)}${personalAnalysisHtml(m)}</div></details>`;
     bindRoleEditor($('modalContent'),m,()=>openFullMatch(matchId));
     const go=$('modalContent').querySelector('.go-mistake-analysis');if(go)go.onclick=()=>{$('modalBackdrop').classList.add('hidden');els.modalBox.classList.remove('match-modal');openMatchAnalysis(matchId);switchSection('mistakes');};
-  }catch(e){console.error(e);$('modalContent').innerHTML=`<div class="error-box">${t('matchLoadFailed')} ${safeText(friendlyError(e.message))}</div>`;}
+  }catch(e){console.error(e);$('modalContent').innerHTML=`<div class="error-box">${t('matchLoadFailed')} ${safeText(friendlyError(e.message))}</div><button class="secondary" id="retryMatchBtn">${t('retryReview')}</button>`;$('retryMatchBtn').onclick=()=>openFullMatch(matchId);}
 }
 
 function openHeroRole(heroId,role){
@@ -999,12 +1040,13 @@ function renderTraining(){
   $('trainingBody').innerHTML=`<div class="quest-hero"><div class="quest-ring" style="--quest:${active?Math.round(results.length/5*100):0}"><b>${results.length}/5</b><span>${t('questProgress')}</span></div><div class="quest-copy"><span class="quest-status ${results.length>=5&&passed>=4?'mastered':results.length>=5?'repeat':active?'ontrack':'ready'}">${status}</span><h3>${safeText(tg.label)}</h3><p>${t('trainingFocus')}: <b>${roleName(tg.role)}</b> · ${t('nextFiveRole')}</p><div class="quest-run">${[0,1,2,3,4].map(i=>{const x=results[i];return`<div class="quest-game ${x?(x.pass?'pass':'fail'):''}"><i>${x?(x.pass?'✓':'×'):i+1}</i><span>${x?`${safeText(heroName(x.m.hero_id))}<small>${x.m.kills}/${x.m.deaths}/${x.m.assists}</small>`:`${t('gameWord')} ${i+1}`}</span></div>`}).join('')}</div>${active?`<div class="training-rule">${t('completed')}: <b>${passed}/5</b>${results.length>=5?` · <b>${passed>=4?t('blockFixed'):t('repeatBlock')}</b>`:''}</div>`:`<div class="training-rule">${t('startBlockHint')}</div>`}</div></div>`;
   $('startTrainingBtn').classList.toggle('hidden',!!active);$('resetTrainingBtn').classList.toggle('hidden',!active);
 }
-function startTraining(){ const m=state.analytics.mistakes[0],tg=trainingTargetFor(m,state.analytics.primaryRole);if(!tg)return;const latest=state.matches[0];localStorage.setItem(trainingStorageKey(),JSON.stringify({...tg,startMatchId:String(latest?.match_id||0),startTime:Number(latest?.start_time||0),startedAt:Date.now()}));queueRemoteUserStateSync();renderTraining(); }
-function resetTraining(){ localStorage.removeItem(trainingStorageKey());queueRemoteUserStateSync();renderTraining(); }
+function startTraining(){ const m=state.analytics.mistakes[0],tg=trainingTargetFor(m,state.analytics.primaryRole);if(!tg)return;const latest=state.matches[0];localStorage.setItem(trainingStorageKey(),JSON.stringify({...tg,startMatchId:String(latest?.match_id||0),startTime:Number(latest?.start_time||0),startedAt:Date.now()}));queueRemoteUserStateSync();renderTraining();renderCoachCockpit(); }
+function resetTraining(){ localStorage.removeItem(trainingStorageKey());queueRemoteUserStateSync();renderTraining();renderCoachCockpit(); }
 function renderProgress(){
   const p=state.analytics.progress,defs=[[t('winrateLabel'),'wr',v=>fmtPct(v,0),true],['KDA','kda',v=>v.toFixed(2),true],[t('deathsLabel'),'deaths',v=>v.toFixed(1),false],['GPM','gpm',v=>Math.round(v),true],['XPM','xpm',v=>Math.round(v),true],[t('coachScore'),'score',v=>Math.round(v),true]];
   const scoreDelta=p.current.score-p.previous.score,headline=scoreDelta>3?t('progressImproved'):scoreDelta<-3?t('progressRegressed'):t('progressStable'),headCls=scoreDelta>3?'up':scoreDelta<-3?'down':'neutral';
   $('progressGrid').innerHTML=`<div class="progress-headline ${headCls}"><span>${t('progressHeadline')}</span><strong>${headline}</strong><b>${scoreDelta>0?'+':''}${scoreDelta.toFixed(0)} ${t('coachScore')}</b></div>`+defs.map(([label,key,fmt,higher])=>{const c=p.current[key],pr=p.previous[key],delta=c-pr,good=higher?delta>0:delta<0,neutral=Math.abs(delta)<.001;return`<div class="progress-card"><span>${label}</span><strong>${fmt(c)}</strong><div class="delta ${neutral?'neutral':good?'up':'down'}">${delta>0?'+':''}${key==='wr'?(delta*100).toFixed(0)+' '+t('percentagePoints'):delta.toFixed(key==='score'?0:1)} ${t('previous20')}</div></div>`;}).join('');
+  if(state.matches.length<40)$('progressGrid').innerHTML=`<div class="notice">${t('insufficientComparison')}</div>`;
   const blocks=[];for(let i=0;i<Math.min(100,state.matches.length);i+=10){const b=state.matches.slice(i,i+10);if(b.length>=5)blocks.push({label:`${i+1}-${i+b.length}`,score:avg(b,m=>m._score||50)});}blocks.reverse();$('blockTrend').innerHTML=blocks.map(b=>`<div class="block-col"><div style="height:${clamp(b.score)}%" title="${t('scoreLabel')} ${b.score.toFixed(0)}"></div><span>${b.label}</span></div>`).join('');
   const lowRoles=state.matches.filter(m=>roleConfidenceLevel(m)==='low').length,manual=Object.keys(state.roleOverrides).length,depth=state.matches.length,rankedN=state.matches.filter(isRanked).length;$('confidencePanel').innerHTML=`<div class="confidence-row"><span>${t('historyDepth')}</span><b>${depth>=150?t('depthHigh'):depth>=80?t('depthMedium'):t('depthLow')} · ${depth}</b></div><div class="confidence-row"><span>${t('rankedLabel')}</span><b>${rankedN}/${depth}</b></div><div class="confidence-row"><span>${t('autoRoleLow')}</span><b>${lowRoles}</b></div><div class="confidence-row"><span>${t('manualRoleCorrections')}</span><b>${manual}</b></div><div class="confidence-row"><span>${t('topMistakeConfidence')}</span><b>${state.analytics.mistakes[0]?Math.round(state.analytics.mistakes[0].confidence)+'%':'—'}</b></div><p class="muted">${t('dataQualityNote')}</p>`;
 }
@@ -1080,7 +1122,34 @@ function openRatingSettings(){
   $('saveRatingBtn').onclick=()=>{const medal=$('manualMedal').value,star=Number($('manualStar').value||1),mmr=Number($('manualMmr').value||0);saveRatingManual({medal:medal||null,star,mmr:mmr>0?mmr:null,updatedAt:Date.now()});$('ratingSaveState').textContent=t('ratingSaved');renderOverview();preview();};$('clearRatingBtn').onclick=()=>{saveRatingManual({});openRatingSettings();renderOverview();};$('modalBackdrop').classList.remove('hidden');
 }
 function exportAnalytics(){ const payload={version:'16',exported_at:new Date().toISOString(),language:state.lang,scope:state.scope,account_id:state.accountId,player:state.profile?.profile||{},rating:{auto:state.ratingAuto,manual:state.ratingManual},matches:state.matches.map(m=>({...m,role:getRole(m),role_final_source:roleSource(m),performance_score:m._score,performance_context:m._scoreContext,duration_bucket:m._durationBucket,coach_verdict:coachVerdict(m).key,coach_risks:coachModelForMatch(m).risks.map(x=>({key:x.key,pct:x.pct})),coach_strengths:coachModelForMatch(m).strengths.map(x=>({key:x.key,pct:x.pct}))})),analytics:{primary_role:state.analytics.primaryRole,dna:state.analytics.dna,mistakes:state.analytics.mistakes,progress:state.analytics.progress,patterns:state.analytics.patterns,sessions:state.analytics.sessions,heroes:state.analytics.heroes.map(h=>({...h,matches:undefined})),hero_roles:(state.analytics.heroRoles||[]).map(h=>({...h,matches:undefined})),benchmark:state.benchmark.data},role_overrides:state.roleOverrides};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`dota-skill-lab-${state.accountId}-v16.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
-function switchSection(id){ document.querySelectorAll('.content-section').forEach(s=>s.classList.toggle('hidden',s.id!==id));document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.section===id));window.scrollTo({top:0,behavior:'smooth'}); }
+function switchSection(id){
+  if(!document.getElementById(id)?.classList.contains('content-section'))return;
+  document.querySelectorAll('.content-section').forEach(s=>s.classList.toggle('hidden',s.id!==id));
+  document.querySelectorAll('.nav-item').forEach(b=>{b.classList.toggle('active',b.dataset.section===id);if(b.dataset.section===id)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+  closeMobileNav();
+  const more=$('mobileMore');more?.classList.toggle('active',!['overview','matches','heroes','sessions','training'].includes(id));
+  window.scrollTo({top:0,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+}
+
+// Responsive navigation reuses the original section buttons and handlers.
+function closeMobileNav(){document.querySelector('.sidebar').classList.remove('nav-expanded');$('mobileMore')?.setAttribute('aria-expanded','false');}
+function initProductUI(){
+  $('welcomeStartBtn').onclick=()=>{localStorage.setItem('dotaSkillLab.welcome.'+state.accountId,'1');$('welcomePanel').classList.add('hidden');document.querySelector('.cockpit-panel').scrollIntoView({block:'start'});};
+  const nav=document.querySelector('.sidebar nav');
+  const more=document.createElement('button');more.id='mobileMore';more.className='mobile-more';more.dataset.i18n='moreNav';more.setAttribute('aria-expanded','false');more.setAttribute('aria-controls','sectionNavigation');nav.id='sectionNavigation';nav.append(more);
+  more.onclick=()=>{const open=document.querySelector('.sidebar').classList.toggle('nav-expanded');more.setAttribute('aria-expanded',String(open));};
+  $('profileMenuBtn').onclick=()=>{const open=$('profileSettings').classList.contains('hidden');$('profileSettings').classList.toggle('hidden',!open);$('profileMenuBtn').setAttribute('aria-expanded',String(open));if(open)els.setup.classList.remove('hidden');};
+  // Move existing controls, retaining IDs, listeners and cloud preferences.
+  $('profileSettings').prepend(document.querySelector('.topbar-actions .lang-switch'));
+  document.querySelector('.shell').inert=!$('authGate').classList.contains('hidden');
+  let returnFocus=null;
+  new MutationObserver(()=>{const open=!$('modalBackdrop').classList.contains('hidden');if(open){returnFocus=document.activeElement;document.querySelector('.shell').inert=true;document.body.classList.add('dialog-open');els.modalBox.focus();}else{document.body.classList.remove('dialog-open');document.querySelector('.shell').inert=!$('authGate').classList.contains('hidden');if(returnFocus?.isConnected&&!returnFocus.closest('.hidden'))returnFocus.focus();}}).observe($('modalBackdrop'),{attributes:true,attributeFilter:['class']});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){if(!$('modalBackdrop').classList.contains('hidden'))$('modalClose').click();else if(document.querySelector('.sidebar').classList.contains('nav-expanded')){closeMobileNav();more.focus();}else{$('profileSettings').classList.add('hidden');$('profileMenuBtn').setAttribute('aria-expanded','false');}}
+    if(e.key==='Tab'&&!$('modalBackdrop').classList.contains('hidden')){const nodes=[...els.modalBox.querySelectorAll('button,select,input,textarea,a[href],[tabindex="0"]')].filter(x=>x.getClientRects().length&&!x.disabled);const first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&(document.activeElement===first||document.activeElement===els.modalBox)){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}
+  });
+}
+initProductUI();
 
 // events
 document.querySelectorAll('.nav-item').forEach(b=>b.onclick=()=>switchSection(b.dataset.section));
