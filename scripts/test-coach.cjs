@@ -34,6 +34,12 @@ const before=read();run("state.roleOverrides[String(state.matches[0].match_id)]=
   assert.notEqual(fingerprint('A',c,'model'),fingerprint('B',c,'model'));
   assert.notEqual(fingerprint('A',before,'model'),fingerprint('A',after,'model'));
   const selection=core.fallback(c);assert.deepEqual(core.validateSelection(selection,c),selection);
+  const constrained=core.schema(c).properties;
+  assert.ok(constrained.evidence_ids.maxItems<=4);
+  assert.ok(constrained.supporting_ids.maxItems<=2);
+  assert.ok(constrained.match_ids.maxItems<=3);
+  const emptySchema=core.schema({...c,priorities:[],facts:[],matches:[]}).properties;
+  for(const key of ['evidence_ids','supporting_ids','match_ids'])assert.equal(emptySchema[key].maxItems,0);
   assert.throws(()=>core.validateSelection({...selection,evidence_ids:['death_after_25']},c));
   assert.throws(()=>core.validateSelection({...selection,match_ids:['123456789']},c));
   assert.throws(()=>core.validateSelection({...selection,summary:'Invented prose'},c));
@@ -45,6 +51,7 @@ const before=read();run("state.roleOverrides[String(state.matches[0].match_id)]=
   const sql=async(parts,...args)=>{const q=parts.join('?');if(q.startsWith('SELECT result'))return cache.has(args[0]+args[1])?[{result:cache.get(args[0]+args[1])}]:[];if(q.startsWith('INSERT INTO dsl_coach_budget')){calls.set(args[0],1+(calls.get(args[0])||0));return rateLimit?[]:[{calls:1}];}if(q.startsWith('INSERT INTO dsl_coach_cache'))cache.set(args[0]+args[1],JSON.parse(args[2]));return [];};
   const fetcher=async(url,options)=>{assert.equal(url,'https://api.groq.com/openai/v1/chat/completions');const body=JSON.parse(options.body);assert.equal(body.model,'openai/gpt-oss-20b');assert.equal(body.response_format.json_schema.strict,true);assert.equal(body.stream,false);assert.equal(body.store,undefined);assert.equal(body.reasoning_effort,'low');assert.deepEqual(body.response_format.json_schema.schema,core.schema(c));paid++;return {ok:true,json:async()=>({choices:[{message:{content:JSON.stringify(selection)}}]})};};
   assert.equal((await generateCoach('A',c,{sql,fetcher})).source,'ai');
+  assert.equal((await generateCoach('truncated',c,{sql,refresh:true,fetcher:async()=>({ok:true,json:async()=>({choices:[{finish_reason:'length',message:{content:'{'}}]})})})).reason,'completion_limit');
   assert.equal((await generateCoach('A',c,{sql,fetcher})).cached,true);assert.equal(paid,1);
   await generateCoach('B',c,{sql,fetcher});assert.equal(paid,2);assert.equal(cache.size,2);
   assert.equal((await generateCoach('A',c,{sql,fetcher,refresh:true})).cached,false);
