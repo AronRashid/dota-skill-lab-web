@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
+import { readCoachBody, generateCoach } from '../lib/coach-service.js';
 
 const STEAM_ORIGIN = 'https://api.steampowered.com';
 const OPEN_DOTA = 'https://api.opendota.com/api';
@@ -259,6 +260,12 @@ export default async function handler(req,res){
       const [st,od]=await Promise.all([fetchText(`${STEAM_ORIGIN}/ISteamWebAPIUtil/GetServerInfo/v1/`,{timeout:8000,retries:0}).then(()=>({ok:true,status:200,details:'OK'})).catch(e=>({ok:false,status:e.status||null,details:e.message})),fetchText(`${OPEN_DOTA}/health`,{timeout:8000,retries:0}).then(()=>({ok:true,status:200,details:'OK'})).catch(e=>({ok:false,status:e.status||null,details:e.message}))]);return json(res,200,{steam:st,opendota:od});
     }
     const session=requireSession(req),accountId=accountFromSteam64(session.steamid64);
+    if(path==='/api/coach'){
+      if(req.method!=='POST'){res.setHeader('Allow','POST');return json(res,405,{error:'Method not allowed'});}
+      if(req.headers.origin && req.headers.origin!==originOf(req))return json(res,403,{error:'Invalid origin'});
+      const body=await readCoachBody(req);
+      return json(res,200,await generateCoach(accountId,body.context,{refresh:body.refresh,sql:database()}));
+    }
     if(path==='/api/steam/bundle'){return json(res,200,await bundleFor(accountId,n(url.searchParams.get('limit'),50),url.searchParams.get('scope')==='all'?'all':'ranked'));}
     if(path==='/api/steam/match'){const matchId=url.searchParams.get('match_id')||'';if(!/^\d{6,20}$/.test(matchId))throw Object.assign(new Error('Invalid match ID.'),{statusCode:400});return json(res,200,await fullMatch(accountId,matchId));}
     if(path==='/api/deep-match'){const matchId=url.searchParams.get('match_id')||'';if(!/^\d{6,20}$/.test(matchId))throw Object.assign(new Error('Invalid match ID.'),{statusCode:400});return json(res,200,await deepMatch(accountId,matchId));}
