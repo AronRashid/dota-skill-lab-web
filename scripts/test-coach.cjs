@@ -39,11 +39,11 @@ const before=read();run("state.roleOverrides[String(state.matches[0].match_id)]=
   assert.throws(()=>core.validateSelection({...selection,summary:'Invented prose'},c));
   await assert.rejects(()=>readCoachBody({body:{context:c,account_id:'other'}}));
   await assert.rejects(()=>readCoachBody({body:{context:{...c,account_id:'other'}}}));
-  delete process.env.OPENAI_API_KEY;assert.equal((await generateCoach('A',c)).reason,'not_configured');
-  process.env.OPENAI_API_KEY='test-only';process.env.COACH_ENABLED='true';
+  process.env.COACH_ENABLED='true';delete process.env.COACH_PROVIDER;delete process.env.COACH_MODEL;delete process.env.GROQ_API_KEY;delete process.env.OPENAI_API_KEY;assert.equal((await generateCoach('A',c)).reason,'not_configured');
+  process.env.GROQ_API_KEY='test-only';process.env.COACH_ENABLED='true';
   const cache=new Map(),calls=new Map();let paid=0,rateLimit=false;
   const sql=async(parts,...args)=>{const q=parts.join('?');if(q.startsWith('SELECT result'))return cache.has(args[0]+args[1])?[{result:cache.get(args[0]+args[1])}]:[];if(q.startsWith('INSERT INTO dsl_coach_budget')){calls.set(args[0],1+(calls.get(args[0])||0));return rateLimit?[]:[{calls:1}];}if(q.startsWith('INSERT INTO dsl_coach_cache'))cache.set(args[0]+args[1],JSON.parse(args[2]));return [];};
-  const fetcher=async()=>{paid++;return {ok:true,json:async()=>({choices:[{message:{content:JSON.stringify(selection)}}]})};};
+  const fetcher=async(url,options)=>{assert.equal(url,'https://api.groq.com/openai/v1/chat/completions');const body=JSON.parse(options.body);assert.equal(body.model,'openai/gpt-oss-20b');assert.equal(body.response_format.json_schema.strict,true);assert.equal(body.stream,false);assert.equal(body.store,undefined);assert.equal(body.reasoning_effort,'low');assert.deepEqual(body.response_format.json_schema.schema,core.schema(c));paid++;return {ok:true,json:async()=>({choices:[{message:{content:JSON.stringify(selection)}}]})};};
   assert.equal((await generateCoach('A',c,{sql,fetcher})).source,'ai');
   assert.equal((await generateCoach('A',c,{sql,fetcher})).cached,true);assert.equal(paid,1);
   await generateCoach('B',c,{sql,fetcher});assert.equal(paid,2);assert.equal(cache.size,2);
@@ -52,6 +52,19 @@ const before=read();run("state.roleOverrides[String(state.matches[0].match_id)]=
   assert.equal((await generateCoach('A',c,{sql,refresh:true,fetcher:async()=>({ok:false,status:429})})).reason,'quota_exceeded');
   assert.equal((await generateCoach('A',c,{sql,refresh:true,fetcher:async()=>{throw Object.assign(new Error(),{name:'TimeoutError'});}})).reason,'timeout');
   assert.equal((await generateCoach('A',c,{sql,refresh:true,fetcher:async()=>({ok:true,json:async()=>({choices:[{message:{content:'{"invented":true}'}}]})})})).source,'automated');
+  assert.notEqual(fingerprint('A',c,'same-model','groq'),fingerprint('A',c,'same-model','openai'));
+  const newMatch=JSON.parse(JSON.stringify(c));newMatch.dataset_revision[0][0]='9999999999';assert.notEqual(fingerprint('A',c,'model'),fingerprint('A',newMatch,'model'));
+  assert.equal((await generateCoach('A',c,{refresh:true,fetcher})).reason,'storage_unavailable');
+  process.env.COACH_ENABLED='false';assert.equal((await generateCoach('A',c,{sql,fetcher})).reason,'disabled');process.env.COACH_ENABLED='true';
+  assert.equal((await generateCoach('A',c,{sql,refresh:true,fetcher:async()=>({ok:false,status:500})})).reason,'provider_error');
+  assert.equal((await generateCoach('A',c,{sql,refresh:true,fetcher:async()=>{throw new Error('network failure');}})).source,'automated');
+  assert.equal((await generateCoach('A',c,{sql,refresh:true,fetcher:async()=>({ok:true,json:async()=>({choices:[{message:{content:JSON.stringify({...selection,priority_id:'invented'})}}]})})})).source,'automated');
+  assert.equal((await generateCoach('A',c,{sql,refresh:true,fetcher:async()=>({ok:true,json:async()=>{throw new SyntaxError('malformed');}})})).source,'automated');
+  process.env.COACH_PROVIDER='openai';process.env.OPENAI_API_KEY='test-openai';
+  const openai=await generateCoach('A',c,{sql,fetcher:async(url,options)=>{assert.equal(url,'https://api.openai.com/v1/chat/completions');const b=JSON.parse(options.body);assert.equal(b.model,'gpt-4o-mini');assert.equal(b.store,false);assert.equal(b.reasoning_effort,undefined);return {ok:true,json:async()=>({choices:[{message:{content:JSON.stringify(selection)}}]})};}});
+  assert.equal(openai.source,'ai');assert.equal(openai.cached,false);assert.notEqual(openai.fingerprint,fingerprint('A',c,'openai/gpt-oss-20b','groq'));
+  process.env.COACH_PROVIDER='unsupported';assert.equal((await generateCoach('A',c,{sql,fetcher})).reason,'not_configured');
+  process.env.COACH_PROVIDER='groq';
   // Exercise the actual authenticated route with signed test sessions; no real network or database.
   const apiSource=fs.readFileSync(path.join(root,'api/index.js'),'utf8').replace(/^import .*;\r?\n/gm,'').replace('export default async function handler','async function handler');
   process.env.SESSION_SECRET='test-secret-at-least-24-characters';process.env.COACH_ENABLED='false';
