@@ -28,3 +28,17 @@ CREATE TABLE IF NOT EXISTS dsl_match_cache (
   PRIMARY KEY (account_id, match_id)
 );
 CREATE INDEX IF NOT EXISTS dsl_match_cache_account_fetched_idx ON dsl_match_cache(account_id, fetched_at DESC);
+-- Optional AI coaching layer. Cache and paid-call budgets are isolated by session account.
+CREATE TABLE IF NOT EXISTS dsl_coach_cache (
+  account_id TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  result JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (account_id, fingerprint)
+);
+CREATE TABLE IF NOT EXISTS dsl_coach_budget (
+  account_id TEXT PRIMARY KEY,
+  day DATE NOT NULL DEFAULT CURRENT_DATE,
+  calls INTEGER NOT NULL DEFAULT 0,
+  last_call TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
