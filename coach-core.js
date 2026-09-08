@@ -56,17 +56,18 @@
       ['evidence_ids',4,p?.evidence || []],
       ['supporting_ids',2,c.facts.filter(f=>['hero','session'].includes(f.kind)).map(f=>f.id)],
       ['match_ids',3,c.matches.filter(m=>m.review_for?.includes(s.priority_id)).map(m=>m.match_id)]
-    ]) if (!Array.isArray(s[key]) || s[key].length>max || new Set(s[key]).size!==s[key].length || s[key].some(id=>!allowed.includes(id))) throw new Error('Unsupported evidence');
+    ]) if (!Array.isArray(s[key]) || s[key].length>max || new Set(s[key]).size!==s[key].length || s[key].some(id=>!allowed.includes(id))) throw Object.assign(new Error('Unsupported evidence'),{code:key});
     if(p && !s.evidence_ids.length) throw new Error('Missing evidence');
     return s;
   }
   function schema(c) {
     const choice=values=>({type:'string',enum:values.length?values:['none']});
+    const list=(values,max,description)=>({type:'array',items:choice([...new Set(values)]),maxItems:Math.min(max,new Set(values).size),description});
     return {type:'object',additionalProperties:false,required:['priority_id','evidence_ids','supporting_ids','match_ids'],properties:{
       priority_id:choice(c.priorities.map(p=>p.id)),
-      evidence_ids:{type:'array',items:choice(c.priorities.flatMap(p=>p.evidence))},
-      supporting_ids:{type:'array',items:choice(c.facts.filter(f=>['hero','session'].includes(f.kind)).map(f=>f.id))},
-      match_ids:{type:'array',items:choice(c.matches.filter(m=>m.review_for?.length).map(m=>m.match_id))}
+      evidence_ids:list(c.priorities.flatMap(p=>p.evidence),4,'Distinct IDs only from the selected priority evidence. At least one for a real priority; empty for none.'),
+      supporting_ids:list(c.facts.filter(f=>['hero','session'].includes(f.kind)).map(f=>f.id),2,'At most two distinct hero or session fact IDs. Return [] when no allowed IDs.'),
+      match_ids:list(c.matches.filter(m=>m.review_for?.length).map(m=>m.match_id),3,'At most three distinct match IDs. Each review_for must include the selected priority_id. Return [] for none.')
     }};
   }
   globalThis.DSLCoach={VERSION,validateContext,fallback,validateSelection,schema};
